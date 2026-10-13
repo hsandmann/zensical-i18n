@@ -35,13 +35,9 @@ on:
       ref:
         required: true
         type: string
-      attestations:
-        required: true
-        type: boolean
 
 permissions:
-  attestations: write # Required for attestations
-  id-token: write # Required for OIDC
+  contents: read
 
 jobs:
   dist:
@@ -49,25 +45,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - name: Set up Python
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
 
       - name: Build sdist and wheel
         run: uv build --out-dir dist
 
-      - name: Create artifact attestation
-        if: inputs.attestations == true
-        uses: actions/attest@v4
-        with:
-          show-summary: false
-          subject-path: dist/*
-
       - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
-          path: dist
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
