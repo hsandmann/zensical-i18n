@@ -2,9 +2,10 @@
 
 Multi-language sites for [Zensical], configured like [mkdocs-static-i18n].
 
-- **One project, many languages** – keep translations in `docs/<locale>/`
-  folders and build all of them into a single site, with the default language
-  at the root and every other language below `/<locale>/`.
+- **One project, many languages** – keep translations next to the originals
+  (`page.pt.md`) or in folders (`pt/page.md`), and build all of them into a
+  single site, with the default language at the root and every other
+  language below `/<locale>/`.
 - **Language selector** – a selector in the header that matches Zensical's
   modern and classic variants, light and dark color schemes, and takes readers
   to the same page in the other language when it exists.
@@ -35,24 +36,22 @@ Install zensical-i18n with:
 pip install zensical-i18n
 ```
 
-Put the sources of each language in a folder named after its locale. Files
-outside of locale folders, like images, are shared by all languages:
+Write the default language as usual, and put translations next to the
+originals, with the locale as a suffix:
 
 ``` sh
 .
 ├─ docs/
 │  ├─ assets/
 │  │  └─ logo.svg
-│  ├─ en/
-│  │  ├─ index.md
-│  │  └─ guide.md
-│  └─ pt/
-│     └─ index.md
+│  ├─ index.md
+│  ├─ index.pt.md
+│  └─ guide.md
 └─ zensical.toml
 ```
 
-Each locale folder is treated as the docs root, so `docs/pt/index.md` links to
-`assets/logo.svg` and `guide.md`. Then, add the languages to `zensical.toml`:
+Links stay the same in all languages, so `index.pt.md` links to `guide.md`
+and `assets/logo.svg`. Then, add the languages to `zensical.toml`:
 
 ``` toml
 [project]
@@ -87,7 +86,7 @@ zensical-i18n build
 ```
 
 This builds `site/` with English at the root and Portuguese in `site/pt/`. As
-`docs/pt/guide.md` doesn't exist, the English guide is used instead, with a
+`docs/guide.pt.md` doesn't exist, the English guide is used instead, with a
 notice that it hasn't been translated yet.
 
 While writing, preview a language with live reload:
@@ -105,7 +104,6 @@ mkdocs-static-i18n:
 plugins:
   - search
   - i18n:
-      docs_structure: folder
       languages:
         - locale: en
           name: English
@@ -116,6 +114,63 @@ plugins:
           nav_translations:
             Get started: Comece aqui
 ```
+
+## Docs structure
+
+zensical-i18n supports both structures of mkdocs-static-i18n, set with
+`docs_structure`:
+
+### Suffix (default)
+
+Translations are files with the locale as a suffix, next to the files of
+the default language, which have no suffix. This works for any file, so
+`logo.pt.png` is the Portuguese version of `logo.png`:
+
+``` sh
+docs/
+├─ assets/
+│  ├─ logo.png
+│  └─ logo.pt.png
+├─ index.md
+├─ index.pt.md
+└─ guide.md
+```
+
+A language uses its own files, then files suffixed with the default
+locale, e.g., `guide.en.md`, then files without suffix. Only configured
+locales are suffixes, so `app.min.js` is left alone.
+
+### Folder
+
+Translations are files in a folder named after the locale. Each locale
+folder is treated as the docs root, and files outside of locale folders,
+like images, are shared by all languages:
+
+``` sh
+docs/
+├─ assets/
+│  └─ logo.png
+├─ en/
+│  ├─ index.md
+│  └─ guide.md
+└─ pt/
+   └─ index.md
+```
+
+Set `docs_structure = "folder"` to use it. A page in `docs/pt/` links to
+`assets/logo.png`, not `../assets/logo.png`.
+
+### Choosing a structure
+
+The suffix structure is the default, as in mkdocs-static-i18n and Hugo. It's
+easy to see which pages lack translations, and links work the same in all
+languages. The folder structure suits projects where translators work
+separately, or where languages have different pages.
+
+> [!NOTE]
+> Versions before 0.3 only supported the folder structure. Projects with a
+> folder named after the default locale, e.g., `docs/en/`, and without
+> `docs_structure` keep using it, with a warning to set it explicitly.
 
 ## Commands
 
@@ -149,7 +204,7 @@ Plugin settings:
 | Setting               | Default  | Description                                   |
 | --------------------- | -------- | --------------------------------------------- |
 | `languages`           | –        | Languages of the project, see below           |
-| `docs_structure`      | `folder` | Only `folder` is supported                    |
+| `docs_structure`      | `suffix` | `suffix` (`page.pt.md`) or `folder` (`pt/page.md`), see [Docs structure](#docs-structure) |
 | `fallback_to_default` | `true`   | Use pages of the default language when missing |
 | `reconfigure_theme`   | `true`   | Add the language selector and untranslated page notice. `reconfigure_material` is supported as an alias |
 | `translate_admonitions` | `true` | Use built-in translations for default admonition titles |
@@ -158,7 +213,7 @@ Language settings:
 
 | Setting               | Description                                       |
 | --------------------- | ------------------------------------------------- |
-| `locale`              | Language tag and folder name, e.g. `en`, `pt-BR` or `zh_TW`. Also sets `theme.language`, falling back to the primary language, e.g. `fr` for `fr_CA`, if the theme has no translations for the locale |
+| `locale`              | Language tag, used as suffix or folder name, e.g. `en`, `pt-BR` or `zh_TW`. Also sets `theme.language`, falling back to the primary language, e.g. `fr` for `fr_CA`, if the theme has no translations for the locale |
 | `name`                | Name shown in the language selector               |
 | `default`             | Whether this is the default language, built to the site root. Defaults to the first language |
 | `build`               | Whether to build the language, defaults to `true`. Languages that aren't built are still listed in the language selector if they have a `link` |
@@ -226,8 +281,8 @@ Independent of `site_url`:
 - **Language of content** – the content of fallback pages is marked with the
   language and direction it's written in, e.g., `lang="en" dir="ltr"` on an
   Arabic site, for screen readers, crawlers and LLMs.
-- **Edit links** – "edit this page" links point to the sources of the
-  language, and to the sources of the default language on fallback pages.
+- **Edit links** – "edit this page" links point to the source each page was
+  built from, e.g., `page.pt.md`, or `page.md` on fallback pages.
 - **Head links** – the theme adds links to the home pages of all languages to
   the head of every page, which would declare every page a translation of a
   home page. As sitemaps declare the actual translations, they're removed.
@@ -248,7 +303,7 @@ per language:
 
 1. **Staging** – the sources of each language are mirrored into
    `.zensical-i18n/docs/<locale>/`, layering the language's files over those
-   of the default language and the shared files.
+   of the default language and the shared files, and removing suffixes.
 2. **Building** – Zensical builds each language in a separate process, with
    the language's settings merged in after Zensical has parsed the config file,
    so YAML tags, `INHERIT` and relative paths keep working. Each language has
@@ -273,7 +328,6 @@ modules.
 
 ## Limitations
 
-- Only the folder structure is supported, not suffixes like `index.pt.md`.
 - Search covers the language that is currently shown.
 - `serve` previews one language at a time.
 - The language selector and notice replace the theme's

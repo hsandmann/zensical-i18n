@@ -1,17 +1,17 @@
 # zensical-i18n
 
-> Multi-language sites for Zensical, the static site generator by the creators of Material for MkDocs. zensical-i18n builds every language of a project from `docs/<locale>/` folders into a single site, configured like the mkdocs-static-i18n plugin for MkDocs, with a language selector, fallback to the default language, translated navigation and admonitions, and hreflang sitemaps.
+> Multi-language sites for Zensical, the static site generator by the creators of Material for MkDocs. zensical-i18n builds every language of a project from suffixed files (`page.pt.md`, the default) or locale folders (`pt/page.md`) into a single site, configured like the mkdocs-static-i18n plugin for MkDocs, with a language selector, fallback to the default language, translated navigation and admonitions, and hreflang sitemaps.
 
 Key facts for using zensical-i18n:
 
 - Install with `pip install zensical-i18n` (Python 3.11+). It depends on `zensical>=0.0.70,<0.1`.
 - Zensical has no plugin API yet, so zensical-i18n is a command that wraps Zensical: use `zensical-i18n build` instead of `zensical build`, and `zensical-i18n serve --lang <locale>` instead of `zensical serve`.
-- Sources go into one folder per locale: `docs/en/index.md`, `docs/pt/index.md`. Each locale folder is treated as the docs root. Files outside of locale folders (e.g., `docs/assets/`) are shared by all languages, so `docs/pt/index.md` links to `assets/logo.svg`, not `../assets/logo.svg`.
+- Default structure (`docs_structure = "suffix"`, as in mkdocs-static-i18n): the default language has no suffix (`docs/index.md`), translations add the locale before the extension (`docs/index.pt.md`, also for assets like `logo.pt.png`). Links are the same in all languages (`guide.md`, `assets/logo.png`).
+- Folder structure (`docs_structure = "folder"`): one folder per locale (`docs/en/index.md`, `docs/pt/index.md`), each treated as the docs root; files outside locale folders are shared, so `docs/pt/index.md` links to `assets/logo.svg`, not `../assets/logo.svg`. Projects without `docs_structure` that have `docs/<default-locale>/` keep using it, with a warning.
 - The default language is built to the site root, every other language to `/<locale>/`.
 - Pages missing in a language are taken from the default language (`fallback_to_default = true`) and get a notice saying they aren't translated yet.
 - `site_dir` must be a folder within the project that doesn't overlap with `docs_dir`, as it's cleaned before building (hidden files like `.git` are kept).
 - Locales must be language tags like `en`, `pt-BR` or `zh_TW`; quote them in YAML (`no` is a boolean).
-- Only the folder structure is supported, not suffixes like `index.pt.md`.
 
 Configuration in `zensical.toml` (Zensical ignores the `i18n` plugin, so plain `zensical build` still works):
 
@@ -22,6 +22,7 @@ site_url = "https://example.com/"  # required for hreflang sitemaps and llms.txt
 nav = [{ "Get started" = "index.md" }]
 
 [project.plugins.i18n]
+docs_structure = "suffix"     # default; or "folder"
 fallback_to_default = true    # use pages of the default language when missing
 reconfigure_theme = true      # language selector and untranslated page notice
 translate_admonitions = true  # built-in translations of default admonition titles
@@ -47,7 +48,7 @@ note = "Observação"
 [project.plugins.i18n.languages.extra]   # merged into project.extra
 ```
 
-In `mkdocs.yml`, the same settings go into the `i18n` entry of `plugins`, using the schema of mkdocs-static-i18n (`docs_structure: folder`, `languages: [{locale, name, default, ...}]`). `reconfigure_material` is accepted as an alias of `reconfigure_theme`.
+In `mkdocs.yml`, the same settings go into the `i18n` entry of `plugins`, using the schema of mkdocs-static-i18n (`docs_structure`, `languages: [{locale, name, default, ...}]`). `reconfigure_material` is accepted as an alias of `reconfigure_theme`.
 
 ## Docs
 
