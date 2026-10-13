@@ -9,6 +9,8 @@ Key facts for using zensical-i18n:
 - Sources go into one folder per locale: `docs/en/index.md`, `docs/pt/index.md`. Each locale folder is treated as the docs root. Files outside of locale folders (e.g., `docs/assets/`) are shared by all languages, so `docs/pt/index.md` links to `assets/logo.svg`, not `../assets/logo.svg`.
 - The default language is built to the site root, every other language to `/<locale>/`.
 - Pages missing in a language are taken from the default language (`fallback_to_default = true`) and get a notice saying they aren't translated yet.
+- `site_dir` must be a folder within the project that doesn't overlap with `docs_dir`, as it's cleaned before building (hidden files like `.git` are kept).
+- Locales must be language tags like `en`, `pt-BR` or `zh_TW`; quote them in YAML (`no` is a boolean).
 - Only the folder structure is supported, not suffixes like `index.pt.md`.
 
 Configuration in `zensical.toml` (Zensical ignores the `i18n` plugin, so plain `zensical build` still works):

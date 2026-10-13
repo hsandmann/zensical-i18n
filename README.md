@@ -124,12 +124,23 @@ plugins:
 | `zensical-i18n build`   | Build all languages into a single site            |
 | `zensical-i18n serve`   | Build and serve a language with live reload       |
 
-Both commands accept the options of the corresponding `zensical` commands,
-like `--config-file`, `--clean`, `--strict` or `--dev-addr`, as well as:
+Options of `zensical-i18n build`:
 
-- `build --lang <locale>` – build only the given language, which can be
-  repeated. The other languages in `site/` are left untouched.
-- `serve --lang <locale>` – serve the given language instead of the default.
+| Option                  | Description                                       |
+| ----------------------- | ------------------------------------------------- |
+| `-f`, `--config-file`   | Path to the config file                           |
+| `-c`, `--clean`         | Clean the cache                                   |
+| `-s`, `--strict`        | Abort the build on warnings                       |
+| `-l`, `--lang <locale>` | Build only the given language, which can be repeated. The other languages in `site/` are left untouched |
+
+Options of `zensical-i18n serve`:
+
+| Option                  | Description                                       |
+| ----------------------- | ------------------------------------------------- |
+| `-f`, `--config-file`   | Path to the config file                           |
+| `-l`, `--lang <locale>` | Language to serve, instead of the default         |
+| `-a`, `--dev-addr`      | IP address and port, e.g. `localhost:8000`        |
+| `-o`, `--open`          | Open the preview in the default browser           |
 
 ## Settings
 
@@ -147,14 +158,14 @@ Language settings:
 
 | Setting               | Description                                       |
 | --------------------- | ------------------------------------------------- |
-| `locale`              | Locale and folder name, e.g. `en` or `pt-BR`. Also sets `theme.language` |
+| `locale`              | Language tag and folder name, e.g. `en`, `pt-BR` or `zh_TW`. Also sets `theme.language`, falling back to the primary language, e.g. `fr` for `fr_CA`, if the theme has no translations for the locale |
 | `name`                | Name shown in the language selector               |
 | `default`             | Whether this is the default language, built to the site root. Defaults to the first language |
-| `build`               | Whether to build the language, defaults to `true` |
-| `link`                | Link in the language selector, e.g., to an external site |
+| `build`               | Whether to build the language, defaults to `true`. Languages that aren't built are still listed in the language selector if they have a `link` |
+| `link`                | Link in the language selector, e.g., to an external site. Must be an `http(s)` URL or a path |
 | `nav_translations`    | Mapping of `nav` titles to their translations     |
 | `admonition_translations` | Mapping of admonition types to their default titles, taking precedence over built-in translations |
-| `untranslated_notice` | Notice on pages that fall back to the default language, with `{language}` replaced by its name |
+| `untranslated_notice` | Notice on pages that fall back to the default language, with `{language}` replaced by its name. Plain text, HTML is escaped |
 | `site_name`, `site_description`, `site_author`, `copyright`, `nav` | Override the project setting |
 | `theme`, `extra`      | Merged into the project setting                   |
 
@@ -201,20 +212,25 @@ discoverable by search engines, crawlers and LLMs:
   default language, which search engines treat like hreflang links in the
   head of pages.
 - **Canonical URLs** – pages falling back to the default language are copies
-  of the original, so their canonical URL points to it, and they're left out
-  of sitemaps, avoiding duplicate content.
-- **Language of content** – the content of fallback pages is marked with the
-  language it's written in, e.g., `lang="en"` on a Portuguese site, for
-  screen readers, crawlers and LLMs.
+  of the original, so their canonical URL points to it, avoiding duplicate
+  content. They have no hreflang alternates, but stay in sitemaps, which the
+  theme uses for instant navigation.
 - **Links without JavaScript** – the language selector links to the same
   page in other languages in the HTML itself, so crawlers follow them.
 - **llms.txt** – with Zensical's `llmstxt` plugin enabled, each language gets
   its own llms.txt, and zensical-i18n adds a "Languages" section linking to
   the llms.txt of all other languages.
 
-The theme adds links to the home pages of all languages to the head of every
-page, which would declare every page a translation of a home page. As the
-sitemaps declare the actual translations, zensical-i18n removes these links.
+Independent of `site_url`:
+
+- **Language of content** – the content of fallback pages is marked with the
+  language and direction it's written in, e.g., `lang="en" dir="ltr"` on an
+  Arabic site, for screen readers, crawlers and LLMs.
+- **Edit links** – "edit this page" links point to the sources of the
+  language, and to the sources of the default language on fallback pages.
+- **Head links** – the theme adds links to the home pages of all languages to
+  the head of every page, which would declare every page a translation of a
+  home page. As sitemaps declare the actual translations, they're removed.
 
 ### Using with coding agents
 
@@ -241,16 +257,29 @@ per language:
    language at the root and all others below their locale.
 
 The language selector reads `zensical-i18n.json`, a manifest of the pages of
-all languages written to each language's root. Without JavaScript, the
-selector links to the home page of each language.
+all languages written to each language's root, to keep readers on the same
+page while navigating.
 
 Add `.zensical-i18n` to your `.gitignore`.
+
+### Safety
+
+The site folder is cleaned before the site is written to it, so `site_dir`
+must be a folder within the project, and must not overlap with `docs_dir` or
+`.zensical-i18n`. Hidden files in it, like `.git` or `.nojekyll`, are kept.
+zensical-i18n refuses to follow symbolic links in its work folder, and runs
+Zensical so that Python files in the project root can't shadow installed
+modules.
 
 ## Limitations
 
 - Only the folder structure is supported, not suffixes like `index.pt.md`.
 - Search covers the language that is currently shown.
 - `serve` previews one language at a time.
+- The language selector and notice replace the theme's
+  `partials/alternate.html` and wrap `partials/content.html`. A custom
+  `alternate.html` in `custom_dir` is ignored while `reconfigure_theme` is
+  enabled.
 
 ## Contributing
 
@@ -284,4 +313,4 @@ Copyright (c) 2026 Humberto Sandmann and contributors
 
 [Zensical]: https://zensical.org
 [mkdocs-static-i18n]: https://github.com/ultrabug/mkdocs-static-i18n
-[internationalization]: https://zensical.org/about/roadmap/#internationalization
+[internationalization]: https://zensical.org/roadmap/#internationalization
