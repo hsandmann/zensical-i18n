@@ -139,3 +139,115 @@ def test_admonition_settings(tmp_path: Path) -> None:
     settings = load_settings(config)
     assert not settings.translate_admonitions
     assert settings.default.admonition_translations == {"note": "Observação"}
+
+
+# ----------------------------------------------------------------------------
+
+
+def _project(tmp_path: Path, project: str, languages: str = "") -> Path:
+    """Write a project with the given project settings and languages."""
+    return _write(
+        tmp_path,
+        f'[project]\nsite_name = "x"\n{project}'
+        + (languages or f'{LANGUAGE}locale = "en"\n'),
+    )
+
+
+@pytest.mark.parametrize(
+    "site_dir",
+    ["", ".", "./", "..", "../outside", "/outside", "docs", "docs/site"],
+)
+def test_invalid_site_dir(tmp_path: Path, site_dir: str) -> None:
+    config = _project(tmp_path, f'site_dir = "{site_dir}"\n')
+    with pytest.raises(I18nError, match="site_dir"):
+        load_settings(config)
+
+
+def test_site_dir_containing_docs(tmp_path: Path) -> None:
+    tmp_path.joinpath("out/docs").mkdir(parents=True)
+    config = _project(tmp_path, 'site_dir = "out"\ndocs_dir = "out/docs"\n')
+    with pytest.raises(I18nError, match="overlap"):
+        load_settings(config)
+
+
+def test_site_dir_symlink_outside(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    project.joinpath("site").symlink_to(outside)
+    config = _project(project, "")
+    with pytest.raises(I18nError, match="site_dir"):
+        load_settings(config)
+
+
+def test_docs_dir_outside(tmp_path: Path) -> None:
+    config = _project(tmp_path, 'docs_dir = "../outside"\n')
+    with pytest.raises(I18nError, match="docs_dir"):
+        load_settings(config)
+
+
+@pytest.mark.parametrize(
+    "locale",
+    ['pt\\" onmouseover=\\"x', "D:", "__proto__", "e", "pt/x", "pt\\nx", ""],
+)
+def test_invalid_locale(tmp_path: Path, locale: str) -> None:
+    config = _project(tmp_path, "", f'{LANGUAGE}locale = "{locale}"\n')
+    with pytest.raises(I18nError, match="locale"):
+        load_settings(config)
+
+
+@pytest.mark.parametrize("locale", ["en", "pt_BR", "pt-BR", "zh-Hant-TW"])
+def test_valid_locale(tmp_path: Path, locale: str) -> None:
+    config = _project(tmp_path, "", f'{LANGUAGE}locale = "{locale}"\n')
+    assert load_settings(config).default.locale == locale
+
+
+def test_yaml_boolean_locale(tmp_path: Path) -> None:
+    tmp_path.joinpath("docs").mkdir()
+    config = tmp_path / "mkdocs.yml"
+    config.write_text(
+        "site_name: x\nplugins:\n  - i18n:\n      languages:\n"
+        "        - locale: no\n"
+    )
+    with pytest.raises(I18nError, match="quote"):
+        load_settings(config)
+
+
+@pytest.mark.parametrize(
+    "link", ["javascript:alert(1)", " JavaScript:alert(1)", "data:text/html,x"]
+)
+def test_invalid_link(tmp_path: Path, link: str) -> None:
+    config = _project(
+        tmp_path, "", f'{LANGUAGE}locale = "en"\nlink = "{link}"\n'
+    )
+    with pytest.raises(I18nError, match="link"):
+        load_settings(config)
+
+
+@pytest.mark.parametrize("link", ["https://example.com/", "/en/", "../en/"])
+def test_valid_link(tmp_path: Path, link: str) -> None:
+    config = _project(
+        tmp_path, "", f'{LANGUAGE}locale = "en"\nlink = "{link}"\n'
+    )
+    assert load_settings(config).default.link == link
+
+
+@pytest.mark.parametrize(
+    "setting",
+    ['build = "false"', "default = 1", "name = 1", "untranslated_notice = 1"],
+)
+def test_invalid_types(tmp_path: Path, setting: str) -> None:
+    config = _project(tmp_path, "", f'{LANGUAGE}locale = "en"\n{setting}\n')
+    with pytest.raises(I18nError):
+        load_settings(config)
+
+
+def test_work_path_symlink(tmp_path: Path) -> None:
+    settings = load_settings(_project(tmp_path, ""))
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    settings.work_dir.mkdir()
+    settings.work_dir.joinpath("docs").symlink_to(outside)
+    with pytest.raises(I18nError, match="symbolic link"):
+        settings.work_path("docs", "en")

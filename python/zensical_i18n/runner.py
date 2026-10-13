@@ -35,7 +35,8 @@ from zensical_i18n.builder import admonitions, overrides
 from zensical_i18n.extensions.admonition import (
     AdmonitionTranslationsExtension,
 )
-from zensical_i18n.settings import load_settings
+from zensical_i18n.languages import hreflang
+from zensical_i18n.settings import Language, Settings, load_settings
 from zensical_i18n.staging import Source, sync
 
 # ----------------------------------------------------------------------------
@@ -78,12 +79,26 @@ def install(locale: str) -> None:
     def patched(config: dict, path: str) -> dict:
         settings = load_settings(Path(path).resolve())
         language = settings.language(locale)
+
+        # The theme can be given as a name in mkdocs.yml, which would be lost
+        # when merging the language's theme settings
+        if isinstance(config.get("theme"), str):
+            config["theme"] = {"name": config["theme"]}
         merge(config, overrides(settings, language))
         config = apply_defaults(config, path)
 
+        # Set the language of the theme, unless set for the language
+        if "language" not in language.theme:
+            config["theme"]["language"] = _theme_language(
+                locale, config["theme_dirs"]
+            )
+
+        # Point edit links to the sources of the language
+        _rewrite_edit_uri(config, settings, language)
+
         # Add templates of the language selector and notice, if enabled
         if settings.reconfigure_theme:
-            theme_dir = settings.work_dir / "theme"
+            theme_dir = settings.work_path("theme")
             _prepare_theme(theme_dir, config["theme_dirs"])
             config["theme_dirs"] = [str(theme_dir), *config["theme_dirs"]]
 
@@ -116,6 +131,55 @@ def main() -> None:
 
 
 # ----------------------------------------------------------------------------
+
+
+def _theme_language(locale: str, theme_dirs: list[str]) -> str:
+    """Return the theme language for a locale.
+
+    The theme provides translations for many, but not all locales, so we fall
+    back to the primary language, e.g., `fr` for `fr_CA`, and then English,
+    instead of failing the build.
+    """
+    tag = hreflang(locale)
+    for candidate in (locale, tag, tag.split("-")[0]):
+        for path in theme_dirs:
+            partial = (
+                Path(path) / "partials" / "languages" / f"{candidate}.html"
+            )
+            if partial.is_file():
+                return candidate
+    return "en"
+
+
+def _rewrite_edit_uri(
+    config: dict, settings: Settings, language: Language
+) -> None:
+    """Point edit and view links to the sources of the language.
+
+    Zensical derives edit links from the docs folder, which is the staged one,
+    so we point them to the locale folder in the docs folder of the project.
+    Links of pages falling back to the default language are rewritten after
+    building, as they're the same setting for all pages.
+    """
+    staged = settings.work_path("docs", language.locale)
+    staged_rel = staged.relative_to(settings.root).as_posix()
+    docs_rel = settings.docs_dir.resolve().relative_to(settings.root.resolve())
+    sources = (docs_rel / language.locale).as_posix()
+
+    # Default edit links include the staged docs folder, configured ones don't
+    edit_uri = config.get("edit_uri")
+    if isinstance(edit_uri, str) and edit_uri:
+        if staged_rel in edit_uri:
+            config["edit_uri"] = edit_uri.replace(staged_rel, sources)
+        else:
+            config["edit_uri"] = f"{edit_uri.rstrip('/')}/{language.locale}"
+
+    # Edit link templates get the locale folder prepended to the path
+    template = config.get("edit_uri_template")
+    if isinstance(template, str) and template:
+        config["edit_uri_template"] = template.replace(
+            "{path", f"{language.locale}/{{path"
+        )
 
 
 def _prepare_theme(theme_dir: Path, theme_dirs: list[str]) -> None:

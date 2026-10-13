@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,6 +51,13 @@ UNSUPPORTED_KEYS = ("fixed_link",)
 
 # Directory for intermediate files, relative to the project root.
 WORK_DIR = ".zensical-i18n"
+
+# Locales are BCP 47-like language tags, e.g., `en`, `pt-BR` or `zh_TW`. They
+# are used as folder names and in markup, so nothing else is allowed.
+LOCALE = re.compile(r"^[A-Za-z]{2,8}(?:[_-][A-Za-z0-9]{1,8})*$")
+
+# Schemes allowed in links to languages - relative links have none.
+LINK_SCHEMES = ("", "http", "https")
 
 # ----------------------------------------------------------------------------
 # Classes
@@ -127,6 +135,22 @@ class Settings:
     def built(self) -> list[Language]:
         """Languages that are part of the build."""
         return [lang for lang in self.languages if lang.build]
+
+    def work_path(self, *parts: str) -> Path:
+        """Return a path in the work folder, ensuring it doesn't escape it.
+
+        The work folder and its contents are generated, so symbolic links in
+        it can only stem from tampering, and could redirect writes and
+        deletions to arbitrary locations - we refuse to follow them.
+        """
+        path = self.work_dir
+        for part in ("", *parts):
+            path = path / part if part else path
+            if path.is_symlink():
+                raise I18nError(f"Refusing to follow symbolic link: {path}")
+        if not path.resolve().is_relative_to(self.work_dir.resolve()):
+            raise I18nError(f"Path escapes the work folder: {path}")
+        return path
 
     def language(self, locale: str) -> Language:
         """Return the language for the given locale."""
@@ -216,28 +240,72 @@ def _parse_settings(
         raise I18nError("The default language must be built.")
 
     # Support the setting name used by mkdocs-static-i18n as well
-    reconfigure = options.get(
-        "reconfigure_theme", options.get("reconfigure_material", True)
-    )
-    return Settings(
+    if "reconfigure_theme" not in options and "reconfigure_material" in options:
+        options = {
+            **options,
+            "reconfigure_theme": options["reconfigure_material"],
+        }
+    settings = Settings(
         config_file=config_file,
         project=project,
         languages=languages,
-        fallback_to_default=bool(options.get("fallback_to_default", True)),
-        reconfigure_theme=bool(reconfigure),
-        translate_admonitions=bool(options.get("translate_admonitions", True)),
+        fallback_to_default=_bool(options, "fallback_to_default", True),
+        reconfigure_theme=_bool(options, "reconfigure_theme", True),
+        translate_admonitions=_bool(options, "translate_admonitions", True),
     )
+
+    # Validate folders, as the site folder is cleaned when building
+    _validate_dirs(settings)
+    return settings
+
+
+def _validate_dirs(settings: Settings) -> None:
+    """Validate the docs and site folders.
+
+    Zensical validates both folders, but only sees the ones we hand it, so we
+    apply the same rules to the folders of the project: both must be inside
+    the project root, and must be different. As the site folder is cleaned
+    before the site is written to it, we additionally ensure it can't contain
+    the project root, the docs folder or the work folder, or be contained in
+    them. Paths are resolved, so symbolic links can't escape the root.
+    """
+    for key, default in (("docs_dir", "docs"), ("site_dir", "site")):
+        value = settings.project.get(key, default)
+        if not isinstance(value, str) or not value.strip():
+            raise I18nError(f"Setting '{key}' must be a non-empty string.")
+
+    # Resolve all folders
+    root = settings.root.resolve()
+    docs_dir = settings.docs_dir.resolve()
+    site_dir = settings.site_dir.resolve()
+    work_dir = settings.work_dir.resolve()
+
+    # Ensure folders are within the project root
+    if not docs_dir.is_relative_to(root):
+        raise I18nError(f"docs_dir must be within project root: {docs_dir}")
+    if not site_dir.is_relative_to(root) or site_dir == root:
+        raise I18nError(
+            f"site_dir must be a folder within project root: {site_dir}"
+        )
+
+    # Ensure the site folder doesn't overlap with the docs or work folder
+    for name, path in (("docs_dir", docs_dir), (WORK_DIR, work_dir)):
+        if site_dir.is_relative_to(path) or path.is_relative_to(site_dir):
+            raise I18nError(f"site_dir must not overlap with {name}.")
 
 
 def _parse_language(entry: Any) -> Language:
     """Parse and validate the settings of a language."""
-    if not isinstance(entry, dict) or not entry.get("locale"):
+    if not isinstance(entry, dict) or "locale" not in entry:
         raise I18nError(f"Each language needs a 'locale', got: {entry!r}")
 
-    # Locales are used as folder names, so they must be plain names
-    locale = str(entry["locale"])
-    if "/" in locale or "\\" in locale or locale.startswith("."):
-        raise I18nError(f"Invalid locale: {locale!r}")
+    # Locales are used as folder names and in markup, so they must be tags
+    locale = entry["locale"]
+    if not isinstance(locale, str) or not LOCALE.match(locale):
+        raise I18nError(
+            f"Invalid locale: {locale!r}. Use a language tag like 'en' or "
+            "'pt-BR', and quote it in YAML, as, e.g., `no` is a boolean."
+        )
     for key in (
         "nav_translations",
         "admonition_translations",
@@ -252,16 +320,45 @@ def _parse_language(entry: Any) -> Language:
         if key in entry:
             click.echo(f"Warning: {locale}: '{key}' is not supported.")
 
+    # Links to languages must be relative, or use http(s), as they end up in
+    # the href of links, where, e.g., `javascript:` URLs would be executed
+    link = _str(entry, "link", locale)
+    if link is not None:
+        scheme = re.match(r"^([A-Za-z][A-Za-z0-9+.-]*):", link.strip())
+        if (scheme and scheme[1].lower() not in LINK_SCHEMES) or (
+            not link.isprintable()
+        ):
+            raise I18nError(f"{locale}: 'link' must be an http(s) URL or path.")
+
     return Language(
         locale=locale,
-        name=str(entry.get("name", locale)),
-        default=bool(entry.get("default", False)),
-        build=bool(entry.get("build", True)),
-        link=entry.get("link"),
-        notice=entry.get("untranslated_notice"),
+        name=_str(entry, "name", locale) or locale,
+        default=_bool(entry, "default", False, locale),
+        build=_bool(entry, "build", True, locale),
+        link=link,
+        notice=_str(entry, "untranslated_notice", locale),
         nav_translations=dict(entry.get("nav_translations", {})),
         admonition_translations=dict(entry.get("admonition_translations", {})),
         theme=dict(entry.get("theme", {})),
         extra=dict(entry.get("extra", {})),
         overrides={k: entry[k] for k in OVERRIDABLE_KEYS if k in entry},
     )
+
+
+def _bool(
+    options: dict[str, Any], key: str, default: bool, locale: str = ""
+) -> bool:
+    """Return a boolean setting, ensuring it's a boolean."""
+    value = options.get(key, default)
+    if not isinstance(value, bool):
+        prefix = f"{locale}: " if locale else ""
+        raise I18nError(f"{prefix}'{key}' must be true or false.")
+    return value
+
+
+def _str(entry: dict[str, Any], key: str, locale: str) -> str | None:
+    """Return an optional string setting, ensuring it's a string."""
+    value = entry.get(key)
+    if value is not None and not isinstance(value, str):
+        raise I18nError(f"{locale}: '{key}' must be a string.")
+    return value
