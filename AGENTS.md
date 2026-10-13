@@ -54,7 +54,17 @@ All four checks run in CI on Python 3.11 to 3.14 and must pass.
 - Post-processing of the assembled site must be idempotent, as `build --lang`
   reprocesses languages that weren't rebuilt.
 - Never touch files outside of `.zensical-i18n/`, `site_dir` and the
-  project's `.cache` (which is swapped and always restored).
+  project's `.cache` (which is swapped and always restored). `site_dir` and
+  `docs_dir` are validated in `settings.py`, paths in the work folder go
+  through `Settings.work_path`, which refuses symbolic links, and
+  `staging.sync` never writes through symbolic links.
+- Zensical is run with `python -P`, so modules in the project root can't
+  shadow installed ones.
+- URLs from Zensical are percent-encoded, paths of sources and manifest keys
+  aren't: decode URLs before comparing (`discovery.py`, `script.html`), and
+  use `staging.encode_url` to match `page.url` in templates.
+- Escape every configured string rendered into HTML (`| e`), and validate
+  values used in markup or paths in `settings.py` (locales, links).
 
 ## Conventions
 
