@@ -216,6 +216,15 @@ The theme adds links to the home pages of all languages to the head of every
 page, which would declare every page a translation of a home page. As the
 sitemaps declare the actual translations, zensical-i18n removes these links.
 
+### Using with coding agents
+
+This repository has an [llms.txt] summarizing how to use and configure
+zensical-i18n, which you can give to your coding agent, and an
+[AGENTS.md] for agents working on zensical-i18n itself.
+
+  [llms.txt]: https://raw.githubusercontent.com/hsandmann/zensical-i18n/master/llms.txt
+  [AGENTS.md]: https://github.com/hsandmann/zensical-i18n/blob/master/AGENTS.md
+
 ## How it works
 
 Zensical doesn't have plugin hooks yet, so zensical-i18n runs Zensical once

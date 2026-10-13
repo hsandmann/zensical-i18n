@@ -63,6 +63,7 @@ Documentation = "https://github.com/hsandmann/zensical-i18n#readme"
 Source = "https://github.com/hsandmann/zensical-i18n"
 Changelog = "https://github.com/hsandmann/zensical-i18n/releases"
 Issues = "https://github.com/hsandmann/zensical-i18n/issues"
+"llms.txt" = "https://raw.githubusercontent.com/hsandmann/zensical-i18n/master/llms.txt"
 
 [project.scripts]
 zensical-i18n = "zensical_i18n.main:cli"
