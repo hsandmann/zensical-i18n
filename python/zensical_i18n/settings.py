@@ -30,7 +30,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import click
 from zensical import config as zensical_config
 
 # ----------------------------------------------------------------------------
@@ -105,6 +104,7 @@ class Settings:
     fallback_to_default: bool = True
     reconfigure_theme: bool = True
     translate_admonitions: bool = True
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def root(self) -> Path:
@@ -232,7 +232,8 @@ def _parse_settings(
     entries = options.get("languages")
     if not isinstance(entries, list) or not entries:
         raise I18nError("Setting 'languages' must be a non-empty list.")
-    languages = [_parse_language(entry) for entry in entries]
+    warnings: list[str] = []
+    languages = [_parse_language(entry, warnings) for entry in entries]
     locales = [lang.locale for lang in languages]
     if len(set(locales)) != len(locales):
         raise I18nError(f"Duplicate locales: {locales}")
@@ -260,22 +261,34 @@ def _parse_settings(
         fallback_to_default=_bool(options, "fallback_to_default", True),
         reconfigure_theme=_bool(options, "reconfigure_theme", True),
         translate_admonitions=_bool(options, "translate_admonitions", True),
+        warnings=warnings,
     )
 
     # Validate folders, as the site folder is cleaned when building
     _validate_dirs(settings)
 
     # Versions before 0.3 defaulted to the folder structure, so we keep using
-    # it for projects that use it without setting it, and ask to set it
+    # it for projects that use it without setting it, and warn about it
     if structure is None:
         folder = settings.docs_dir / settings.default.locale
         if folder.is_dir():
             settings.docs_structure = "folder"
-            click.echo(
-                f"Warning: {folder} looks like the folder structure, which is "
-                "used, but the default is 'suffix'. Set docs_structure = "
+            settings.warnings.append(
+                f"{folder} looks like the folder structure, which is used, "
+                "but the default is 'suffix' since 0.3. Set docs_structure = "
                 '"folder" in the i18n settings to silence this warning.'
             )
+
+    # Locale folders with the suffix structure would be published as shared
+    # files, clashing with the folders of the languages in the site
+    if settings.docs_structure == "suffix":
+        for lang in languages:
+            folder = settings.docs_dir / lang.locale
+            if folder.is_dir():
+                raise I18nError(
+                    f"Found locale folder {folder}, but docs_structure is "
+                    "'suffix'. Set docs_structure = \"folder\" to use it."
+                )
     return settings
 
 
@@ -316,7 +329,7 @@ def _validate_dirs(settings: Settings) -> None:
             raise I18nError(f"site_dir must not overlap with {name}.")
 
 
-def _parse_language(entry: Any) -> Language:
+def _parse_language(entry: Any, warnings: list[str]) -> Language:
     """Parse and validate the settings of a language."""
     if not isinstance(entry, dict) or "locale" not in entry:
         raise I18nError(f"Each language needs a 'locale', got: {entry!r}")
@@ -338,9 +351,11 @@ def _parse_language(entry: Any) -> Language:
             raise I18nError(f"{locale}: '{key}' must be a mapping.")
 
     # Warn about settings we recognize, but don't implement
-    for key in UNSUPPORTED_KEYS:
-        if key in entry:
-            click.echo(f"Warning: {locale}: '{key}' is not supported.")
+    warnings.extend(
+        f"{locale}: '{key}' is not supported."
+        for key in UNSUPPORTED_KEYS
+        if key in entry
+    )
 
     # Links to languages must be relative, or use http(s), as they end up in
     # the href of links, where, e.g., `javascript:` URLs would be executed

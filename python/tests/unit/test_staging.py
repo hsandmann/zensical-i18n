@@ -244,7 +244,7 @@ def test_collect_suffix(suffix_project: Path) -> None:
 
 def test_collect_suffix_default_language_suffix(suffix_project: Path) -> None:
     docs = suffix_project.parent / "docs"
-    docs.joinpath("guide/install.en.md").write_text("# Install (en)\n")
+    docs.joinpath("guide/install.md").rename(docs / "guide/install.en.md")
     settings = load_settings(suffix_project)
 
     # Files suffixed with the default locale take precedence
@@ -256,3 +256,32 @@ def test_collect_suffix_default_language_suffix(suffix_project: Path) -> None:
     assert files[Path("guide/install.md")] == staging.Source(
         docs / "guide/install.en.md", "en"
     )
+
+
+def test_collect_suffix_conflict(suffix_project: Path) -> None:
+    docs = suffix_project.parent / "docs"
+    docs.joinpath("guide/install.en.md").write_text("# Install (en)\n")
+    settings = load_settings(suffix_project)
+    with pytest.raises(I18nError, match="Conflicting files"):
+        staging.collect(settings, settings.default)
+
+
+def test_translation_is_not_shadowed(suffix_project: Path) -> None:
+    docs = suffix_project.parent / "docs"
+    docs.joinpath("guide/index.md").write_text("# Guide\n")
+    docs.joinpath("guide/README.pt.md").write_text("# Guia\n")
+    settings = load_settings(suffix_project)
+    files = staging.collect(settings, settings.language("pt"))
+    assert files[Path("guide/README.md")].fallback is None
+    assert Path("guide/index.md") not in files
+    pages = staging.pages(settings, settings.language("pt"))
+    assert pages["guide/"] is True
+
+
+def test_check_unconfigured_suffixes(suffix_project: Path) -> None:
+    docs = suffix_project.parent / "docs"
+    docs.joinpath("index.de.md").write_text("# Start\n")
+    settings = load_settings(suffix_project)
+    warnings = staging.check(settings)
+    assert len(warnings) == 1
+    assert "index.de.md" in warnings[0]

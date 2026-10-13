@@ -138,7 +138,14 @@ docs/
 
 A language uses its own files, then files suffixed with the default
 locale, e.g., `guide.en.md`, then files without suffix. Only configured
-locales are suffixes, so `app.min.js` is left alone.
+locales are suffixes, so `app.min.js` is left alone, while `lib.es.js` would
+be a Spanish file, if `es` is configured. Having both `guide.md` and
+`guide.en.md` for the default language `en` is an error.
+
+Link to files without suffix, e.g., `guide.md` or `assets/logo.png`, which
+resolves to the file of each language. Links with suffix, e.g.,
+`guide.pt.md`, work as well, but Zensical reports them as invalid, as it
+validates links before they're resolved.
 
 ### Folder
 

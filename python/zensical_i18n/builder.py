@@ -80,9 +80,22 @@ def overrides(settings: Settings, language: Language) -> dict[str, Any]:
     if "nav" in project:
         result["nav"] = nav.translate(project["nav"], language.nav_translations)
 
+    # Point edit links to the actual sources of pages, by encoded page URL,
+    # with the paths in the staged and actual docs folder, raw and encoded
+    extra = dict(language.extra)
+    extra["i18n_edits"] = {
+        staging.encode_url(url): [
+            page.src,
+            page.source,
+            staging.encode_url(page.src),
+            staging.encode_url(page.source),
+        ]
+        for url, page in staging.page_sources(settings, language).items()
+        if page.source and page.source != page.src
+    }
+
     # Configure the language selector and the untranslated page notice, and
     # list languages that aren't built, but link to an external site
-    extra = dict(language.extra)
     if settings.reconfigure_theme:
         links = [
             {
@@ -150,6 +163,7 @@ def build(
     only: list[str] | None = None,
 ) -> None:
     """Build all or the given languages, and assemble the site."""
+    _warn(settings)
     selected = settings.built
     if only:
         unknown = set(only) - {lang.locale for lang in selected}
@@ -229,6 +243,7 @@ def serve(
     language's settings are recomputed whenever Zensical parses it.
     """
     language = settings.language(locale) if locale else settings.default
+    _warn(settings)
     stage(settings, language)
     options = {"dev_addr": dev_addr, "open": open_browser, "strict": False}
 
@@ -332,6 +347,12 @@ def _restore_cache(current: Path, caches: Path, locales: set[str]) -> None:
             _remove(project)
         else:
             project.rename(current)
+
+
+def _warn(settings: Settings) -> None:
+    """Print warnings about settings and sources, once per run."""
+    for warning in [*settings.warnings, *staging.check(settings)]:
+        click.echo(f"Warning: {warning}")
 
 
 def _link(current: Language, target: Language) -> str:

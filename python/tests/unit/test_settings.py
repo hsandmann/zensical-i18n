@@ -271,21 +271,33 @@ def test_default_docs_structure(tmp_path: Path) -> None:
     assert settings.docs_structure == "suffix"
 
 
-def test_folder_structure_detected(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_folder_structure_detected(tmp_path: Path) -> None:
     tmp_path.joinpath("docs/en").mkdir(parents=True)
     settings = load_settings(_project(tmp_path, ""))
     assert settings.docs_structure == "folder"
-    assert 'docs_structure = "folder"' in capsys.readouterr().out
+    assert 'docs_structure = "folder"' in settings.warnings[0]
 
 
-def test_explicit_docs_structure(tmp_path: Path) -> None:
+def test_explicit_folder_structure(tmp_path: Path) -> None:
     tmp_path.joinpath("docs/en").mkdir(parents=True)
     config = _project(
         tmp_path,
         "",
-        '[project.plugins.i18n]\ndocs_structure = "suffix"\n'
+        '[project.plugins.i18n]\ndocs_structure = "folder"\n'
         f'{LANGUAGE}locale = "en"\n',
     )
-    assert load_settings(config).docs_structure == "suffix"
+    settings = load_settings(config)
+    assert settings.docs_structure == "folder"
+    assert settings.warnings == []
+
+
+def test_suffix_structure_with_locale_folders(tmp_path: Path) -> None:
+    tmp_path.joinpath("docs/pt").mkdir(parents=True)
+    config = _project(
+        tmp_path,
+        "",
+        '[project.plugins.i18n]\ndocs_structure = "suffix"\n'
+        f'{LANGUAGE}locale = "en"\n{LANGUAGE}locale = "pt"\n',
+    )
+    with pytest.raises(I18nError, match='docs_structure = "folder"'):
+        load_settings(config)
