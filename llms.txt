@@ -1,0 +1,60 @@
+# zensical-i18n
+
+> Multi-language sites for Zensical, the static site generator by the creators of Material for MkDocs. zensical-i18n builds every language of a project from `docs/<locale>/` folders into a single site, configured like the mkdocs-static-i18n plugin for MkDocs, with a language selector, fallback to the default language, translated navigation and admonitions, and hreflang sitemaps.
+
+Key facts for using zensical-i18n:
+
+- Install with `pip install zensical-i18n` (Python 3.11+). It depends on `zensical>=0.0.70,<0.1`.
+- Zensical has no plugin API yet, so zensical-i18n is a command that wraps Zensical: use `zensical-i18n build` instead of `zensical build`, and `zensical-i18n serve --lang <locale>` instead of `zensical serve`.
+- Sources go into one folder per locale: `docs/en/index.md`, `docs/pt/index.md`. Each locale folder is treated as the docs root. Files outside of locale folders (e.g., `docs/assets/`) are shared by all languages, so `docs/pt/index.md` links to `assets/logo.svg`, not `../assets/logo.svg`.
+- The default language is built to the site root, every other language to `/<locale>/`.
+- Pages missing in a language are taken from the default language (`fallback_to_default = true`) and get a notice saying they aren't translated yet.
+- Only the folder structure is supported, not suffixes like `index.pt.md`.
+
+Configuration in `zensical.toml` (Zensical ignores the `i18n` plugin, so plain `zensical build` still works):
+
+```toml
+[project]
+site_name = "Documentation"
+site_url = "https://example.com/"  # required for hreflang sitemaps and llms.txt links
+nav = [{ "Get started" = "index.md" }]
+
+[project.plugins.i18n]
+fallback_to_default = true    # use pages of the default language when missing
+reconfigure_theme = true      # language selector and untranslated page notice
+translate_admonitions = true  # built-in translations of default admonition titles
+
+[[project.plugins.i18n.languages]]
+locale = "en"
+name = "English"
+default = true
+
+[[project.plugins.i18n.languages]]
+locale = "pt"
+name = "Português"
+site_name = "Documentação"  # also: site_description, site_author, copyright, nav
+untranslated_notice = "Ainda sem tradução. Exibindo a versão em {language}."
+
+[project.plugins.i18n.languages.nav_translations]
+"Get started" = "Comece aqui"
+
+[project.plugins.i18n.languages.admonition_translations]
+note = "Observação"
+
+[project.plugins.i18n.languages.theme]   # merged into project.theme
+[project.plugins.i18n.languages.extra]   # merged into project.extra
+```
+
+In `mkdocs.yml`, the same settings go into the `i18n` entry of `plugins`, using the schema of mkdocs-static-i18n (`docs_structure: folder`, `languages: [{locale, name, default, ...}]`). `reconfigure_material` is accepted as an alias of `reconfigure_theme`.
+
+## Docs
+
+- [README](https://raw.githubusercontent.com/hsandmann/zensical-i18n/master/README.md): Full documentation, including all settings, commands, admonitions, search engines and LLMs, how it works and limitations
+- [Example project](https://github.com/hsandmann/zensical-i18n/tree/master/examples/basic): An English and Portuguese site with fallback, translated navigation and admonitions
+
+## Optional
+
+- [Source code](https://github.com/hsandmann/zensical-i18n): Python package in `python/zensical_i18n/`
+- [Changelog](https://github.com/hsandmann/zensical-i18n/releases): Release notes
+- [Zensical](https://zensical.org/docs/): Documentation of Zensical itself
+- [mkdocs-static-i18n](https://ultrabug.github.io/mkdocs-static-i18n/): The MkDocs plugin whose configuration is mirrored
