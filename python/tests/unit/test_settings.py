@@ -61,6 +61,7 @@ def test_load_toml(project: Path) -> None:
     assert settings.language("pt").overrides == {"site_name": "Documentação"}
     assert settings.fallback_to_default
     assert settings.reconfigure_theme
+    assert settings.translate_admonitions
 
 
 def test_load_mkdocs_yaml(tmp_path: Path) -> None:
@@ -124,3 +125,17 @@ def test_unsupported_docs_structure(tmp_path: Path) -> None:
     )
     with pytest.raises(I18nError, match="suffix"):
         load_settings(config)
+
+
+def test_admonition_settings(tmp_path: Path) -> None:
+    config = _write(
+        tmp_path,
+        '[project]\nsite_name = "x"\n'
+        "[project.plugins.i18n]\ntranslate_admonitions = false\n"
+        f'{LANGUAGE}locale = "pt"\n'
+        "[project.plugins.i18n.languages.admonition_translations]\n"
+        'note = "Observação"\n',
+    )
+    settings = load_settings(config)
+    assert not settings.translate_admonitions
+    assert settings.default.admonition_translations == {"note": "Observação"}

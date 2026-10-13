@@ -31,7 +31,10 @@ from typing import Any
 from zensical import build, serve
 from zensical import config as zensical_config
 
-from zensical_i18n.builder import overrides
+from zensical_i18n.builder import admonitions, overrides
+from zensical_i18n.extensions.admonition import (
+    AdmonitionTranslationsExtension,
+)
 from zensical_i18n.settings import load_settings
 from zensical_i18n.staging import Source, sync
 
@@ -87,6 +90,18 @@ def install(locale: str) -> None:
             # Rehash templates, so changes to ours trigger a rebuild as well
             templates = zensical_config._list_templates(config)
             config["template_hash"] = zensical_config._hash(templates)
+
+        # Add the Markdown extension translating admonition titles. This must
+        # happen after defaults are applied, as merging the extensions of the
+        # project would replace them, and they come in various formats.
+        translations = admonitions(settings, language)
+        if translations:
+            name = AdmonitionTranslationsExtension.name
+            if name not in config["markdown_extensions"]:
+                config["markdown_extensions"].append(name)
+            config["mdx_configs"][name] = {"translations": translations}
+            mdx_configs = config["mdx_configs"]
+            config["mdx_configs_hash"] = zensical_config._hash(mdx_configs)
         return config
 
     zensical_config._apply_defaults = patched  # ty:ignore[invalid-assignment]

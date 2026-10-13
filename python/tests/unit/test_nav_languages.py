@@ -57,3 +57,19 @@ def test_notice() -> None:
     assert languages.notice("pt-PT", "English").startswith("Esta página")
     assert languages.notice("xx", "English").startswith("This page")
     assert languages.notice("pt", "English", "{language}!") == "English!"
+
+
+def test_admonitions() -> None:
+    assert languages.admonitions("pt")["note"] == "Nota"
+    assert languages.admonitions("pt-BR")["warning"] == "Aviso"
+    assert languages.admonitions("zh-TW")["note"] == "註"
+    assert languages.admonitions("en") == {}
+    assert languages.admonitions("xx") == {}
+
+
+def test_admonitions_cover_all_types() -> None:
+    types = set(languages.ADMONITIONS["pt"])
+    assert len(types) == 12
+    for locale, titles in languages.ADMONITIONS.items():
+        assert set(titles) == types, locale
+        assert all(titles.values()), locale

@@ -52,6 +52,7 @@ classifiers = [
     "Topic :: Text Processing :: Markup :: Markdown",
 ]
 dependencies = [
+    "markdown>=3.7",
     # Hooks into Zensical's configuration internals - widen after testing
     "zensical>=0.0.70,<0.1",
 ]

@@ -46,7 +46,7 @@ OVERRIDABLE_KEYS = (
 )
 
 # Settings of mkdocs-static-i18n that are recognized, but not implemented.
-UNSUPPORTED_KEYS = ("admonition_translations", "fixed_link")
+UNSUPPORTED_KEYS = ("fixed_link",)
 
 # Directory for intermediate files, relative to the project root.
 WORK_DIR = ".zensical-i18n"
@@ -71,6 +71,7 @@ class Language:
     link: str | None = None
     notice: str | None = None
     nav_translations: dict[str, str] = field(default_factory=dict)
+    admonition_translations: dict[str, str] = field(default_factory=dict)
     theme: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
     overrides: dict[str, Any] = field(default_factory=dict)
@@ -90,6 +91,7 @@ class Settings:
     languages: list[Language]
     fallback_to_default: bool = True
     reconfigure_theme: bool = True
+    translate_admonitions: bool = True
 
     @property
     def root(self) -> Path:
@@ -223,6 +225,7 @@ def _parse_settings(
         languages=languages,
         fallback_to_default=bool(options.get("fallback_to_default", True)),
         reconfigure_theme=bool(reconfigure),
+        translate_admonitions=bool(options.get("translate_admonitions", True)),
     )
 
 
@@ -235,7 +238,12 @@ def _parse_language(entry: Any) -> Language:
     locale = str(entry["locale"])
     if "/" in locale or "\\" in locale or locale.startswith("."):
         raise I18nError(f"Invalid locale: {locale!r}")
-    for key in ("nav_translations", "theme", "extra"):
+    for key in (
+        "nav_translations",
+        "admonition_translations",
+        "theme",
+        "extra",
+    ):
         if not isinstance(entry.get(key, {}), dict):
             raise I18nError(f"{locale}: '{key}' must be a mapping.")
 
@@ -252,6 +260,7 @@ def _parse_language(entry: Any) -> Language:
         link=entry.get("link"),
         notice=entry.get("untranslated_notice"),
         nav_translations=dict(entry.get("nav_translations", {})),
+        admonition_translations=dict(entry.get("admonition_translations", {})),
         theme=dict(entry.get("theme", {})),
         extra=dict(entry.get("extra", {})),
         overrides={k: entry[k] for k in OVERRIDABLE_KEYS if k in entry},

@@ -202,3 +202,15 @@ def test_mkdocs_yaml(project: Path) -> None:
     pt = _page(root / "site", "pt/index.html")
     assert _lang(pt) == "pt"
     assert _title(pt) == "Início - Documentação"
+
+
+def test_admonitions(site: Path) -> None:
+    def titles(path: str) -> list[str]:
+        soup = _page(site, path)
+        return [p.get_text() for p in soup.select(".admonition-title")]
+
+    # Default titles are translated, explicit titles are kept, also on pages
+    # that fall back to the default language
+    assert titles("pt/index.html") == ["Nota"]
+    assert titles("pt/guide/install/index.html") == ["Nota", "Custom tip"]
+    assert titles("guide/install/index.html") == ["Note", "Custom tip"]
