@@ -18,7 +18,7 @@
   {% set icon = config.theme.icon.alternate or "material/translate" %}
   <div class="md-header__option md-i18n" data-md-i18n data-md-i18n-base="{{ base_url }}/" data-md-i18n-manifest="{{ base_url }}/{{ i18n.manifest }}">
     <div class="md-select">
-      <button class="md-header__button md-i18n__button" aria-label="{{ lang.t('select.language') }}" aria-haspopup="true">
+      <button class="md-header__button md-i18n__button" aria-label="{{ lang.t('select.language') }}">
         <span class="md-icon">
           {% include ".icons/" ~ icon ~ ".svg" %}
         </span>
