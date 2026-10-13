@@ -17,20 +17,28 @@
 
     /* Compute path of current page, relative to the language root */
     function current() {
-      var path = decodeURI(location.pathname)
-      var prefix = decodeURI(base.pathname)
-      return path.startsWith(prefix) ? path.slice(prefix.length) : ""
+      try {
+        var path = decodeURI(location.pathname)
+        var prefix = decodeURI(base.pathname)
+        return path.startsWith(prefix) ? path.slice(prefix.length) : ""
+      } catch (err) {
+        return ""
+      }
     }
 
     /* Link languages to the current page, or their home pages */
     function update() {
       if (!pages) return
       var path = current()
-      var index = path.replace(/index\.html$/, "")
+      /* Index pages are listed as folders or index.html, depending on the
+         use_directory_urls setting, while either form can be visited */
+      var alias = /(^|\/)$/.test(path)
+        ? path + "index.html"
+        : path.replace(/index\.html$/, "")
       links.forEach(function (link) {
         var home = new URL(link.dataset.mdI18nRoot, base)
         var known = pages[link.hreflang] || []
-        var exists = known.includes(path) || known.includes(index)
+        var exists = known.includes(path) || known.includes(alias)
         link.href = exists
           ? new URL(encodeURI(path), home).href + location.hash
           : home.href
