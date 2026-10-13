@@ -13,6 +13,9 @@ Multi-language sites for [Zensical], configured like [mkdocs-static-i18n].
   reader's language.
 - **Translated navigation** – titles in `nav` are translated per language,
   and each language can override settings like `site_name` or `copyright`.
+- **Translated admonitions** – default titles of admonitions like
+  `!!! note` are translated, e.g., to "Nota" in Portuguese, out of the box
+  for over 20 languages.
 
 > [!NOTE]
 > Zensical doesn't support multi-language sites or third-party plugins yet.
@@ -135,6 +138,7 @@ Plugin settings:
 | `docs_structure`      | `folder` | Only `folder` is supported                    |
 | `fallback_to_default` | `true`   | Use pages of the default language when missing |
 | `reconfigure_theme`   | `true`   | Add the language selector and untranslated page notice. `reconfigure_material` is supported as an alias |
+| `translate_admonitions` | `true` | Use built-in translations for default admonition titles |
 
 Language settings:
 
@@ -146,9 +150,43 @@ Language settings:
 | `build`               | Whether to build the language, defaults to `true` |
 | `link`                | Link in the language selector, e.g., to an external site |
 | `nav_translations`    | Mapping of `nav` titles to their translations     |
+| `admonition_translations` | Mapping of admonition types to their default titles, taking precedence over built-in translations |
 | `untranslated_notice` | Notice on pages that fall back to the default language, with `{language}` replaced by its name |
 | `site_name`, `site_description`, `site_author`, `copyright`, `nav` | Override the project setting |
 | `theme`, `extra`      | Merged into the project setting                   |
+
+## Admonitions
+
+Admonitions without a title get one derived from their type, e.g., "Note"
+for `!!! note`. zensical-i18n translates these default titles for each
+language, for all admonition syntaxes (`!!!`, `???` and `///`), while titles
+given explicitly are left untouched:
+
+``` markdown
+!!! note
+    Rendered with the title "Nota" in Portuguese.
+
+!!! note "Leia isto"
+    Rendered with the title "Leia isto".
+```
+
+Built-in translations cover the types of the theme – `note`, `abstract`,
+`info`, `tip`, `success`, `question`, `warning`, `failure`, `danger`, `bug`,
+`example` and `quote`. Translate other types, or change the built-in
+translations, with `admonition_translations`:
+
+``` toml
+[[project.plugins.i18n.languages]]
+locale = "pt"
+name = "Português"
+
+[project.plugins.i18n.languages.admonition_translations]
+note = "Observação"
+todo = "Tarefa"
+```
+
+An explicit title that equals the default title, like `!!! note "Note"`, is
+indistinguishable from a default title, and thus translated as well.
 
 ## How it works
 
@@ -176,7 +214,6 @@ Add `.zensical-i18n` to your `.gitignore`.
 - Only the folder structure is supported, not suffixes like `index.pt.md`.
 - Search covers the language that is currently shown.
 - `serve` previews one language at a time.
-- `admonition_translations` of mkdocs-static-i18n isn't supported.
 
 ## Contributing
 

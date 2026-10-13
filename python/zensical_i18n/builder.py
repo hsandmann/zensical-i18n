@@ -108,6 +108,18 @@ def overrides(settings: Settings, language: Language) -> dict[str, Any]:
     return result
 
 
+def admonitions(settings: Settings, language: Language) -> dict[str, str]:
+    """Return the admonition titles of a language.
+
+    Built-in titles for the language are used, unless disabled, with titles
+    configured for the language taking precedence.
+    """
+    titles = {}
+    if settings.translate_admonitions:
+        titles = languages.admonitions(language.locale)
+    return {**titles, **language.admonition_translations}
+
+
 def stage(settings: Settings, language: Language) -> None:
     """Synchronize the staged docs folder of a language with its sources."""
     files = staging.collect(settings, language)
