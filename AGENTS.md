@@ -21,8 +21,10 @@ All four checks run in CI on Python 3.11 to 3.14 and must pass.
   - `main.py` – click CLI (`build`, `serve`)
   - `settings.py` – reads `[project.plugins.i18n]` or the `i18n` plugin of
     `mkdocs.yml` (mkdocs-static-i18n schema)
-  - `staging.py` – mirrors `docs/<locale>/` into `.zensical-i18n/docs/<locale>`,
-    marks fallback pages with `i18n_fallback` front matter, writes the page
+  - `staging.py` – mirrors the sources of each language into
+    `.zensical-i18n/docs/<locale>` (suffix structure: `page.pt.md` becomes
+    `page.md`; folder structure: `pt/page.md` becomes `page.md`), marks
+    fallback pages with `i18n_fallback` front matter, writes the page
     manifest `zensical-i18n.json`
   - `builder.py` – per-language overrides, builds (one subprocess per
     language), per-language cache swapping, assembling `site/`, `serve`
@@ -37,6 +39,7 @@ All four checks run in CI on Python 3.11 to 3.14 and must pass.
   - `languages.py` – built-in translations (notice, admonition titles)
   - `templates/partials/` – language selector, untranslated notice
 - `python/tests/` – `unit/`, `integration/` (real builds), `fixtures/project/`
+  (folder structure), `fixtures/suffix/` (suffix structure)
 - `examples/basic/` – example site
 
 ## Invariants
