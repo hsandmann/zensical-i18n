@@ -35,6 +35,7 @@ from zensical_i18n.builder import admonitions, overrides
 from zensical_i18n.extensions.admonition import (
     AdmonitionTranslationsExtension,
 )
+from zensical_i18n.extensions.suffix import SuffixLinksExtension
 from zensical_i18n.languages import direction, tags
 from zensical_i18n.settings import Language, Settings, load_settings
 from zensical_i18n.staging import Source, sync
@@ -43,12 +44,18 @@ from zensical_i18n.staging import Source, sync
 # Constants
 # ----------------------------------------------------------------------------
 
-# Templates of the language selector and untranslated page notice.
+# Templates of the language selector, untranslated page notice and actions.
 TEMPLATES = Path(__file__).parent / "templates"
 
-# Partial that our content partial wraps, copied from the theme in use.
-CONTENT = "partials/content.html"
-CONTENT_ORIGINAL = "partials/i18n/original-content.html"
+# Partials that our partials wrap, copied from the theme in use, by name.
+WRAPPED = {
+    "partials/content.html": "partials/i18n/original-content.html",
+    "partials/actions.html": "partials/i18n/original-actions.html",
+}
+
+# Templates that are always used, as they fix links instead of changing the
+# appearance of the theme, which `reconfigure_theme` controls.
+ESSENTIAL = ("partials/actions.html",)
 
 # ----------------------------------------------------------------------------
 # Functions
@@ -100,27 +107,34 @@ def install(locale: str) -> None:
         # Point edit links to the sources of the language
         _rewrite_edit_uri(config, settings, language)
 
-        # Add templates of the language selector and notice, if enabled
-        if settings.reconfigure_theme:
-            theme_dir = settings.work_path("theme")
-            _prepare_theme(theme_dir, config["theme_dirs"])
-            config["theme_dirs"] = [str(theme_dir), *config["theme_dirs"]]
+        # Add our templates, i.e., the language selector and notice, if
+        # enabled, and the actions fixing edit links
+        theme_dir = settings.work_path("theme")
+        _prepare_theme(
+            theme_dir, config["theme_dirs"], full=settings.reconfigure_theme
+        )
+        config["theme_dirs"] = [str(theme_dir), *config["theme_dirs"]]
 
-            # Rehash templates, so changes to ours trigger a rebuild as well
-            templates = zensical_config._list_templates(config)
-            config["template_hash"] = zensical_config._hash(templates)
+        # Rehash templates, so changes to ours trigger a rebuild as well
+        templates = zensical_config._list_templates(config)
+        config["template_hash"] = zensical_config._hash(templates)
 
-        # Add the Markdown extension translating admonition titles. This must
-        # happen after defaults are applied, as merging the extensions of the
-        # project would replace them, and they come in various formats.
+        # Add our Markdown extensions, resolving links to files with a locale
+        # suffix, and translating admonition titles. This must happen after
+        # defaults are applied, as merging the extensions of the project would
+        # replace them, and they come in various formats.
+        if settings.docs_structure == "suffix":
+            locales = [lang.locale for lang in settings.languages]
+            _add_extension(
+                config, SuffixLinksExtension.name, {"locales": locales}
+            )
         translations = admonitions(settings, language)
         if translations:
-            name = AdmonitionTranslationsExtension.name
-            if name not in config["markdown_extensions"]:
-                config["markdown_extensions"].append(name)
-            config["mdx_configs"][name] = {"translations": translations}
-            mdx_configs = config["mdx_configs"]
-            config["mdx_configs_hash"] = zensical_config._hash(mdx_configs)
+            _add_extension(
+                config,
+                AdmonitionTranslationsExtension.name,
+                {"translations": translations},
+            )
         return config
 
     zensical_config._apply_defaults = patched  # ty:ignore[invalid-assignment]
@@ -135,6 +149,19 @@ def main() -> None:
 
 
 # ----------------------------------------------------------------------------
+
+
+def _add_extension(config: dict, name: str, options: dict) -> None:
+    """Add a Markdown extension, and rehash the Markdown configuration.
+
+    Zensical uses the hash to detect changes, so pages are rendered again
+    when the options of the extension change.
+    """
+    if name not in config["markdown_extensions"]:
+        config["markdown_extensions"].append(name)
+    config["mdx_configs"][name] = options
+    mdx_configs = config["mdx_configs"]
+    config["mdx_configs_hash"] = zensical_config._hash(mdx_configs)
 
 
 def _theme_language(locale: str, theme_dirs: list[str]) -> str:
@@ -180,24 +207,31 @@ def _rewrite_edit_uri(
                 break
 
 
-def _prepare_theme(theme_dir: Path, theme_dirs: list[str]) -> None:
+def _prepare_theme(
+    theme_dir: Path, theme_dirs: list[str], *, full: bool
+) -> None:
     """Prepare our templates on top of the theme in use.
 
-    The content partial of the theme in use, which might be customized by the
-    author, is copied next to our templates, so ours can wrap it. Zensical may
-    parse the configuration more than once, so only changes are written, as
-    rewriting templates during a build makes Zensical skip rendering.
+    The partials we wrap are copied from the theme in use, which might be
+    customized by the author, next to our templates, so ours can include
+    them. Zensical may parse the configuration more than once, so only
+    changes are written, as rewriting templates during a build makes Zensical
+    skip rendering.
     """
     files = {
         path.relative_to(TEMPLATES): Source(path)
         for path in TEMPLATES.rglob("*")
         if path.is_file()
+        and (full or path.relative_to(TEMPLATES).as_posix() in ESSENTIAL)
     }
-    for path in theme_dirs:
-        content = Path(path) / CONTENT
-        if content.is_file():
-            files[Path(CONTENT_ORIGINAL)] = Source(content)
-            break
+    for name, original in WRAPPED.items():
+        if Path(name) not in files:
+            continue
+        for path in theme_dirs:
+            partial = Path(path) / name
+            if partial.is_file():
+                files[Path(original)] = Source(partial)
+                break
 
     # Synchronize templates
     sync(files, theme_dir)

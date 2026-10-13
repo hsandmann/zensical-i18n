@@ -55,6 +55,9 @@ FRONT_MATTER = re.compile(
 # Byte order mark, which editors on Windows may add to the start of files.
 BOM = "\ufeff"
 
+# Suffixes that look like locales, e.g., `de` or `pt-BR`.
+LOCALE_LIKE = re.compile(r"[a-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*")
+
 # ----------------------------------------------------------------------------
 # Classes
 # ----------------------------------------------------------------------------
@@ -107,8 +110,36 @@ def collect(settings: Settings, language: Language) -> dict[Path, Source]:
     if not docs_dir.is_dir():
         raise I18nError(f"Docs directory does not exist: {docs_dir}")
     if settings.docs_structure == "folder":
-        return _collect_folder(settings, language)
-    return _collect_suffix(settings, language)
+        files = _collect_folder(settings, language)
+    else:
+        files = _collect_suffix(settings, language)
+    return _drop_shadowed(files, settings.directory_urls)
+
+
+def check(settings: Settings) -> list[str]:
+    """Check the sources for likely mistakes, returning warnings.
+
+    With the suffix structure, pages suffixed with something that looks like
+    a locale, which isn't configured, are built as pages of their own, e.g.,
+    `index.de.md` as `/index.de/`, which happens after removing a language.
+    """
+    warnings = []
+    if settings.docs_structure == "suffix" and settings.docs_dir.is_dir():
+        locales = {lang.locale for lang in settings.languages}
+        for path in _walk(settings.docs_dir):
+            parts = path.name.split(".")
+            if (
+                path.suffix == ".md"
+                and len(parts) >= 3  # noqa: PLR2004
+                and LOCALE_LIKE.fullmatch(parts[-2])
+                and parts[-2] not in locales
+            ):
+                rel = path.relative_to(settings.docs_dir)
+                warnings.append(
+                    f"{rel} has the suffix '{parts[-2]}', which isn't a "
+                    "configured locale, so it's built as a page of its own."
+                )
+    return warnings
 
 
 def split_suffix(rel: Path, locales: set[str]) -> tuple[Path, str | None]:
@@ -196,9 +227,15 @@ def _collect_suffix(
         rel, locale = split_suffix(path.relative_to(docs_dir), locales)
         variants.setdefault(rel, {})[locale] = path
 
-    # Pick the variant of each file for the language
+    # Pick the variant of each file for the language, ensuring the default
+    # language doesn't have two variants, like mkdocs-static-i18n does
     files: dict[Path, Source] = {}
     for rel, paths in sorted(variants.items()):
+        if default in paths and None in paths:
+            raise I18nError(
+                f"Conflicting files for the default language: {paths[None]} "
+                f"and {paths[default]}. Remove one of them."
+            )
         if language.locale in paths:
             files[rel] = Source(paths[language.locale])
             continue
@@ -214,6 +251,29 @@ def _collect_suffix(
 
     # Return collected files
     return files
+
+
+def _drop_shadowed(
+    files: dict[Path, Source], directory_urls: bool
+) -> dict[Path, Source]:
+    """Drop fallback pages rendered to the same URL as translated ones.
+
+    A translated `README.md` and a fallback `index.md` in the same folder are
+    rendered to the same URL, where Zensical prefers `index.md`, which would
+    hide the translation.
+    """
+    translated = {
+        page_url(rel, directory_urls)
+        for rel, source in files.items()
+        if rel.suffix == ".md" and source.fallback is None
+    }
+    return {
+        rel: source
+        for rel, source in files.items()
+        if source.fallback is None
+        or rel.suffix != ".md"
+        or page_url(rel, directory_urls) not in translated
+    }
 
 
 def manifest(settings: Settings) -> bytes:

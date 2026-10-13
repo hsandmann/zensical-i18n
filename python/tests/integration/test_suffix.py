@@ -136,3 +136,69 @@ def test_sitemaps_and_manifest(site: Path) -> None:
         "en": ["", "guide/install/"],
         "pt": ["", "extra/", "guide/install/"],
     }
+
+
+def test_links_to_suffixed_files(suffix_project: Path) -> None:
+    docs = suffix_project.parent / "docs"
+    docs.joinpath("index.pt.md").write_text(
+        "# Início\n\n[Extra](extra.pt.md)\n\n![Logo](assets/logo.pt.png)\n"
+    )
+    # Zensical validates links before they're resolved, and reports links
+    # to suffixed pages as invalid, but they work in the site
+    builder.build(load_settings(suffix_project))
+    soup = _soup(suffix_project.parent / "site/pt/index.html")
+    content = soup.select_one("article")
+    assert content is not None
+    assert content.select_one("a[href='extra/']") is not None
+    assert content.select_one("img[src='assets/logo.png']") is not None
+
+
+@pytest.mark.parametrize("fixture", ["project", "suffix_project"])
+def test_partial_builds_are_identical(
+    fixture: str, request: pytest.FixtureRequest
+) -> None:
+    config: Path = request.getfixturevalue(fixture)
+    text = config.read_text()
+    if "repo_url" not in text:
+        text = text.replace(
+            "[project]\n",
+            '[project]\nrepo_url = "https://github.com/o/r"\n',
+            1,
+        ).replace(
+            'features = ["navigation.instant"]',
+            (
+                'features = ["navigation.instant", "content.action.edit", '
+                '"content.action.view"]'
+            ),
+        )
+        config.write_text(text)
+    settings = load_settings(config)
+    builder.build(settings)
+    site = config.parent / "site"
+    full = {
+        path.relative_to(site): path.read_bytes()
+        for path in site.rglob("*")
+        if path.is_file()
+    }
+
+    # Rebuilding some languages, repeatedly, gives the same site
+    for only in (["en"], ["pt"], ["pt"], ["en", "pt"]):
+        builder.build(settings, only=only)
+        partial = {
+            path.relative_to(site): path.read_bytes()
+            for path in site.rglob("*")
+            if path.is_file()
+        }
+        assert partial.keys() == full.keys()
+        changed = [str(path) for path in full if partial[path] != full[path]]
+        assert changed == [], only
+
+
+def test_warnings_are_printed_once(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    text = project.read_text().replace('docs_structure = "folder"\n', "")
+    project.write_text(text)
+    builder.build(load_settings(project))
+    output = capsys.readouterr().out
+    assert output.count("looks like the folder structure") == 1

@@ -64,9 +64,6 @@ HTML_LANG = re.compile(r"(<html\b[^>]*\blang=)(\"[^\"]*\"|'[^']*'|[^\s>]+)")
 # Element containing the content of a page.
 ARTICLE = re.compile(r"<article\b[^>]*\bmd-content__inner\b[^>]*>")
 
-# Edit and view links of a page.
-ACTION = re.compile(r"<a\b[^>]*\bmd-content__button\b[^>]*>")
-
 # Marker of the section of llms.txt listing the other languages, so we can
 # replace it without touching the sections of the project.
 LLMS_MARKER = "<!-- zensical-i18n: languages -->"
@@ -198,10 +195,8 @@ def _process_pages(site: Site, language: Language) -> None:
         result = ALTERNATE.sub("", text)
         tag = languages.hreflang(language.locale)
         result = HTML_LANG.sub(rf'\g<1>"{tag}"', result, count=1)
-        if page is not None:
-            result = _rewrite_edit_links(page, result)
-            if not page.translated:
-                result = _process_fallback(site, language, result)
+        if page is not None and not page.translated:
+            result = _process_fallback(site, language, result)
         if result != text:
             path.write_text(result, encoding="utf-8")
 
@@ -238,32 +233,6 @@ def _process_fallback(site: Site, language: Language, text: str) -> str:
 
         text = CANONICAL.sub(canonical, text, count=1)
     return text
-
-
-def _rewrite_edit_links(page: staging.Page, text: str) -> str:
-    """Point edit and view links of a page to its actual source.
-
-    Zensical links to the staged file, e.g., `docs/page.md`, which we replace
-    with the source the page was built from, e.g., `docs/pt/page.md` with the
-    folder structure, or `docs/page.pt.md` with the suffix structure.
-    """
-    if not page.source or page.source == page.src:
-        return text
-    variants = [
-        (page.src, page.source),
-        (staging.encode_url(page.src), staging.encode_url(page.source)),
-    ]
-
-    def rewrite(match: re.Match[str]) -> str:
-        element = match[0]
-        for src, source in variants:
-            index = element.rfind(f"/{src}")
-            if index >= 0:
-                start = index + 1
-                return element[:start] + source + element[start + len(src) :]
-        return element
-
-    return ACTION.sub(rewrite, text)
 
 
 def _process_sitemap(site: Site, language: Language) -> None:
