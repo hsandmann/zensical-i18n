@@ -1,0 +1,11 @@
+{#-
+  Copyright (c) 2026 Humberto Sandmann and contributors
+  SPDX-License-Identifier: MIT
+
+  Wraps the content partial of the theme in use, adding a notice to pages
+  that aren't translated and fall back to the default language.
+-#}
+{% if page.meta and page.meta.i18n_fallback and config.extra.i18n %}
+  {% include "partials/i18n/notice.html" %}
+{% endif %}
+{% include "partials/i18n/original-content.html" %}

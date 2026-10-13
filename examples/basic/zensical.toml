@@ -1,0 +1,41 @@
+[project]
+site_name = "Documentation"
+site_url = "https://example.com/docs/"
+nav = [
+  { "Get started" = "index.md" },
+  { "Markdown in 5min" = "markdown.md" },
+]
+
+[project.theme]
+language = "en"
+features = ["navigation.instant", "navigation.footer", "search.highlight"]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+# Multi-language support with zensical-i18n, ignored by Zensical itself
+[project.plugins.i18n]
+fallback_to_default = true
+
+[[project.plugins.i18n.languages]]
+locale = "en"
+name = "English"
+default = true
+
+[[project.plugins.i18n.languages]]
+locale = "pt"
+name = "Português"
+site_name = "Documentação"
+
+[project.plugins.i18n.languages.nav_translations]
+"Get started" = "Comece aqui"
+"Markdown in 5min" = "Markdown em 5min"

@@ -1,0 +1,18 @@
+{#-
+  Copyright (c) 2026 Humberto Sandmann and contributors
+  SPDX-License-Identifier: MIT
+
+  Notice on pages that aren't translated yet, written in the language of
+  the site, while the content is in the default language.
+-#}
+{% if config.theme.variant == "modern" %}
+  {% set icon = "lucide/info" %}
+{% else %}
+  {% set icon = "material/information-outline" %}
+{% endif %}
+<aside class="md-i18n-notice" role="note" lang="{{ config.extra.i18n.locale }}">
+  <span class="md-icon">
+    {% include ".icons/" ~ icon ~ ".svg" %}
+  </span>
+  <p>{{ config.extra.i18n.notice }}</p>
+</aside>

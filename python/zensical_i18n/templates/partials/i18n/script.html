@@ -1,0 +1,65 @@
+{#-
+  Copyright (c) 2026 Humberto Sandmann and contributors
+  SPDX-License-Identifier: MIT
+
+  Links each language to the current page, if it exists in that language,
+  using the manifest written by zensical-i18n. The header isn't replaced on
+  instant navigation, so links are updated whenever the document changes.
+  Without JavaScript, or if the manifest can't be loaded, languages link to
+  their home pages.
+-#}
+<script>
+  (function () {
+    var root = document.currentScript.parentElement
+    var base = new URL(root.dataset.mdI18nBase, location.href)
+    var links = root.querySelectorAll("[data-md-i18n-root]")
+    var pages = null
+
+    /* Compute path of current page, relative to the language root */
+    function current() {
+      var path = decodeURI(location.pathname)
+      var prefix = decodeURI(base.pathname)
+      return path.startsWith(prefix) ? path.slice(prefix.length) : ""
+    }
+
+    /* Link languages to the current page, or their home pages */
+    function update() {
+      if (!pages) return
+      var path = current()
+      var index = path.replace(/index\.html$/, "")
+      links.forEach(function (link) {
+        var home = new URL(link.dataset.mdI18nRoot, base)
+        var known = pages[link.hreflang] || []
+        var exists = known.includes(path) || known.includes(index)
+        link.href = exists
+          ? new URL(encodeURI(path), home).href + location.hash
+          : home.href
+        link.toggleAttribute("data-md-i18n-missing", !exists)
+      })
+    }
+
+    /* Load manifest, and update links on interaction */
+    fetch(root.dataset.mdI18nManifest)
+      .then(function (res) { return res.ok ? res.json() : {} })
+      .then(function (data) { pages = data.pages || null; update() })
+      .catch(function () {})
+    root.addEventListener("pointerenter", update)
+    root.addEventListener("focusin", update)
+
+    /* Update links on instant navigation, once the theme is loaded */
+    function observe() {
+      if (window.document$)
+        window.document$.subscribe(update)
+    }
+    if (document.readyState === "loading")
+      document.addEventListener("DOMContentLoaded", observe)
+    else
+      observe()
+
+    /* Close selector on escape */
+    root.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && root.contains(document.activeElement))
+        document.activeElement.blur()
+    })
+  })()
+</script>
