@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from zensical_i18n import languages, nav, staging
+from zensical_i18n import discovery, languages, nav, staging
 from zensical_i18n.settings import I18nError, Language, Settings, load_settings
 
 if TYPE_CHECKING:
@@ -94,8 +94,13 @@ def overrides(settings: Settings, language: Language) -> dict[str, Any]:
         extra["alternate"] = links
         extra["i18n"] = {
             "locale": language.locale,
+            "default": settings.default.locale,
             "manifest": staging.MANIFEST,
             "languages": links,
+            "pages": {
+                lang.locale: sorted(staging.pages(settings, lang))
+                for lang in settings.built
+            },
             "notice": languages.notice(
                 language.locale, settings.default.name, language.notice
             ),
@@ -189,6 +194,8 @@ def assemble(settings: Settings, selected: list[Language]) -> None:
         if not language.default:
             _replace(outputs / language.locale, site_dir / language.locale)
 
+    # Declare translations to search engines and LLMs
+    discovery.publish(settings)
     click.echo(f"Site written to {site_dir}")
 
 

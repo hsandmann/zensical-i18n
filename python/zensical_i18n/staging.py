@@ -118,37 +118,49 @@ def manifest(settings: Settings) -> bytes:
     The language selector uses the manifest to link to the current page in
     other languages, falling back to their home pages if it doesn't exist.
     """
-    pages = {
-        lang.locale: page_urls(collect(settings, lang), settings.directory_urls)
-        for lang in settings.built
+    data = {
+        lang.locale: sorted(pages(settings, lang)) for lang in settings.built
     }
-    return json.dumps({"pages": pages}, ensure_ascii=False).encode()
+    return json.dumps({"pages": data}, ensure_ascii=False).encode()
+
+
+def pages(settings: Settings, language: Language) -> dict[str, bool]:
+    """Return the pages of a language, and whether they're translated.
+
+    Pages are identified by their URL, relative to the language root. Pages
+    that fall back to the default language aren't translated, while shared
+    pages, which are outside of all locale folders, are.
+    """
+    result: dict[str, bool] = {}
+    for rel, source in collect(settings, language).items():
+        url = page_url(rel, settings.directory_urls)
+        if url is not None:
+            translated = source.fallback is None
+            result[url] = result.get(url, False) or translated
+    return result
+
+
+def page_url(rel: Path, directory_urls: bool) -> str | None:
+    """Return the URL of a page, relative to the language root."""
+    if rel.suffix != ".md":
+        return None
+
+    # Index pages are rendered to the folder they're contained in
+    path = PurePosixPath(*rel.parts).with_suffix("")
+    if path.name in ("index", "README"):
+        parent = path.parent
+        if not directory_urls:
+            return str(parent / "index.html")
+        return f"{parent}/" if parent.name else ""
+
+    # Other pages are rendered to a folder or file of the same name
+    return f"{path}/" if directory_urls else f"{path}.html"
 
 
 def page_urls(files: dict[Path, Source], directory_urls: bool) -> list[str]:
     """Return the URLs of pages, relative to the language root."""
-    urls = set()
-    for rel in files:
-        if rel.suffix != ".md":
-            continue
-
-        # Index pages are rendered to the folder they're contained in
-        path = PurePosixPath(*rel.parts).with_suffix("")
-        if path.name in ("index", "README"):
-            parent = path.parent
-            if not directory_urls:
-                urls.add(str(parent / "index.html"))
-            elif parent.name:
-                urls.add(f"{parent}/")
-            else:
-                urls.add("")
-        elif directory_urls:
-            urls.add(f"{path}/")
-        else:
-            urls.add(f"{path}.html")
-
-    # Return sorted URLs
-    return sorted(urls)
+    urls = {page_url(rel, directory_urls) for rel in files}
+    return sorted(url for url in urls if url is not None)
 
 
 def mark_fallback(text: str, locale: str) -> bytes:
