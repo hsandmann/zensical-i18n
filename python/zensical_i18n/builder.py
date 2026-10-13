@@ -46,6 +46,9 @@ if TYPE_CHECKING:
 # Constants
 # ----------------------------------------------------------------------------
 
+# Template mapping page URLs to sources for edit links, in the theme folder.
+EDITS = "partials/i18n/edits.html"
+
 # Cache folder of Zensical, relative to the project root.
 CACHE_DIR = ".cache"
 
@@ -80,19 +83,7 @@ def overrides(settings: Settings, language: Language) -> dict[str, Any]:
     if "nav" in project:
         result["nav"] = nav.translate(project["nav"], language.nav_translations)
 
-    # Point edit links to the actual sources of pages, by encoded page URL,
-    # with the paths in the staged and actual docs folder, raw and encoded
     extra = dict(language.extra)
-    extra["i18n_edits"] = {
-        staging.encode_url(url): [
-            page.src,
-            page.source,
-            staging.encode_url(page.src),
-            staging.encode_url(page.source),
-        ]
-        for url, page in staging.page_sources(settings, language).items()
-        if page.source and page.source != page.src
-    }
 
     # Configure the language selector and the untranslated page notice, and
     # list languages that aren't built, but link to an external site
@@ -117,8 +108,9 @@ def overrides(settings: Settings, language: Language) -> dict[str, Any]:
             "languages": links,
             "pages": {
                 lang.locale: sorted(
-                    staging.encode_url(url)
+                    key
                     for url in staging.pages(settings, lang)
+                    for key in staging.url_keys(url)
                 )
                 for lang in settings.built
             },
@@ -134,6 +126,38 @@ def overrides(settings: Settings, language: Language) -> dict[str, Any]:
     return result
 
 
+def edits(settings: Settings, language: Language) -> bytes:
+    """Generate the template pointing edit links to the sources of pages.
+
+    Zensical links to staged files, e.g., `page.md`, while pages are built
+    from, e.g., `page.pt.md` or `pt/page.md`. The template maps page URLs to
+    the paths of the staged and actual source, raw and encoded. It's a
+    template, so `serve` picks up changes, as Zensical watches templates.
+    """
+    data = {
+        key: [
+            page.src,
+            page.source,
+            staging.encode_url(page.src),
+            staging.encode_url(page.source),
+        ]
+        for url, page in staging.page_sources(settings, language).items()
+        if page.source and page.source != page.src
+        for key in staging.url_keys(url)
+    }
+    value = json.dumps(data, ensure_ascii=False, sort_keys=True)
+    return f"{{%- set edits = {value} -%}}\n".encode()
+
+
+def write_edits(settings: Settings, language: Language) -> None:
+    """Write the template pointing edit links to sources, if it changed."""
+    path = settings.work_path("theme", *EDITS.split("/"))
+    data = edits(settings, language)
+    if not path.is_file() or path.read_bytes() != data:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+
 def admonitions(settings: Settings, language: Language) -> dict[str, str]:
     """Return the admonition titles of a language.
 
@@ -146,13 +170,16 @@ def admonitions(settings: Settings, language: Language) -> dict[str, str]:
     return {**titles, **language.admonition_translations}
 
 
-def stage(settings: Settings, language: Language) -> None:
-    """Synchronize the staged docs folder of a language with its sources."""
+def stage(settings: Settings, language: Language) -> bool:
+    """Synchronize the staged docs folder of a language with its sources.
+
+    Returns whether anything changed.
+    """
     files = staging.collect(settings, language)
     if settings.reconfigure_theme:
         data = staging.manifest(settings)
         files[Path(staging.MANIFEST)] = staging.Source(data=data)
-    staging.sync(files, settings.work_path("docs", language.locale))
+    return staging.sync(files, settings.work_path("docs", language.locale))
 
 
 def build(
@@ -300,8 +327,15 @@ def _watch(
     child: subprocess.Popen,
     interval: float,
 ) -> None:
-    """Synchronize sources until Zensical exits, reloading settings."""
+    """Synchronize sources until Zensical exits, reloading settings.
+
+    When sources or settings change, the edit links template is regenerated,
+    which Zensical picks up, as it watches templates, and new warnings are
+    printed. Errors are printed once until they change.
+    """
     config_mtime = settings.config_file.stat().st_mtime
+    shown = set(_warnings(settings))
+    error = None
     try:
         while child.poll() is None:
             time.sleep(interval)
@@ -309,13 +343,22 @@ def _watch(
             # a syntax error, which Zensical reports as well
             try:
                 mtime = settings.config_file.stat().st_mtime
-                if mtime != config_mtime:
+                reloaded = mtime != config_mtime
+                if reloaded:
                     config_mtime = mtime
                     settings = load_settings(settings.config_file)
                     language = settings.language(language.locale)
-                stage(settings, language)
+                if stage(settings, language) or reloaded:
+                    write_edits(settings, language)
+                    for warning in _warnings(settings):
+                        if warning not in shown:
+                            shown.add(warning)
+                            click.echo(f"Warning: {warning}")
+                error = None
             except Exception as e:  # noqa: BLE001
-                click.echo(f"Error: {e}")
+                if str(e) != error:
+                    error = str(e)
+                    click.echo(f"Error: {e}")
     except KeyboardInterrupt:
         pass
     finally:
@@ -351,8 +394,13 @@ def _restore_cache(current: Path, caches: Path, locales: set[str]) -> None:
 
 def _warn(settings: Settings) -> None:
     """Print warnings about settings and sources, once per run."""
-    for warning in [*settings.warnings, *staging.check(settings)]:
+    for warning in _warnings(settings):
         click.echo(f"Warning: {warning}")
+
+
+def _warnings(settings: Settings) -> list[str]:
+    """Return warnings about settings and sources."""
+    return [*settings.warnings, *staging.check(settings)]
 
 
 def _link(current: Language, target: Language) -> str:

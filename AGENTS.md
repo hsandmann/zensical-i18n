@@ -72,7 +72,11 @@ All four checks run in CI on Python 3.11 to 3.14 and must pass.
   values used in markup or paths in `settings.py` (locales, links).
 - Fix links when rendering (templates, Markdown extensions) where possible,
   as `serve` doesn't post-process pages, e.g., edit links are rewritten by
-  `templates/partials/actions.html` using `extra.i18n_edits`.
+  `templates/partials/actions.html` using the generated template
+  `partials/i18n/edits.html`, which `serve` regenerates when pages change,
+  as Zensical watches templates, but not data in the config.
+- `page.url` in templates is encoded like `staging.encode_url`, except for
+  `%` and `?` - use `staging.url_keys` for lookups by page URL.
 - Code running in the runner (settings, staging, overrides) runs in every
   child process: collect warnings in `Settings.warnings` or
   `staging.check`, which the builder prints once per run.

@@ -31,7 +31,7 @@ from typing import Any
 from zensical import build, serve
 from zensical import config as zensical_config
 
-from zensical_i18n.builder import admonitions, overrides
+from zensical_i18n.builder import EDITS, admonitions, edits, overrides
 from zensical_i18n.extensions.admonition import (
     AdmonitionTranslationsExtension,
 )
@@ -111,7 +111,10 @@ def install(locale: str) -> None:
         # enabled, and the actions fixing edit links
         theme_dir = settings.work_path("theme")
         _prepare_theme(
-            theme_dir, config["theme_dirs"], full=settings.reconfigure_theme
+            theme_dir,
+            config["theme_dirs"],
+            full=settings.reconfigure_theme,
+            edits=edits(settings, language),
         )
         config["theme_dirs"] = [str(theme_dir), *config["theme_dirs"]]
 
@@ -208,7 +211,7 @@ def _rewrite_edit_uri(
 
 
 def _prepare_theme(
-    theme_dir: Path, theme_dirs: list[str], *, full: bool
+    theme_dir: Path, theme_dirs: list[str], *, full: bool, edits: bytes
 ) -> None:
     """Prepare our templates on top of the theme in use.
 
@@ -224,6 +227,7 @@ def _prepare_theme(
         if path.is_file()
         and (full or path.relative_to(TEMPLATES).as_posix() in ESSENTIAL)
     }
+    files[Path(EDITS)] = Source(data=edits)
     for name, original in WRAPPED.items():
         if Path(name) not in files:
             continue
