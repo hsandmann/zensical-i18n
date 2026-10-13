@@ -198,20 +198,20 @@ def _process_pages(site: Site, language: Language) -> None:
         result = ALTERNATE.sub("", text)
         tag = languages.hreflang(language.locale)
         result = HTML_LANG.sub(rf'\g<1>"{tag}"', result, count=1)
-        if page is not None and not page.translated:
-            result = _process_fallback(site, language, page, result)
+        if page is not None:
+            result = _rewrite_edit_links(page, result)
+            if not page.translated:
+                result = _process_fallback(site, language, result)
         if result != text:
             path.write_text(result, encoding="utf-8")
 
 
-def _process_fallback(
-    site: Site, language: Language, page: staging.Page, text: str
-) -> str:
+def _process_fallback(site: Site, language: Language, text: str) -> str:
     """Process a page falling back to the default language.
 
     The content is marked with the language it's written in, so screen
-    readers, crawlers and LLMs handle it correctly, edit links point to the
-    sources of the default language, and the canonical URL to the original.
+    readers, crawlers and LLMs handle it correctly, and the canonical URL
+    points to the original.
     """
     default = site.settings.default
     tag = languages.hreflang(default.locale)
@@ -226,19 +226,6 @@ def _process_fallback(
 
     text = ARTICLE.sub(mark, text, count=1)
 
-    # Point edit links to the sources of the default language
-    sources = {page.src, staging.encode_url(page.src)}
-
-    def edit(match: re.Match[str]) -> str:
-        element = match[0]
-        for src in sources:
-            element = element.replace(
-                f"/{language.locale}/{src}", f"/{default.locale}/{src}"
-            )
-        return element
-
-    text = ACTION.sub(edit, text)
-
     # Point the canonical URL to the original, reusing Zensical's encoding
     if site.base:
         base, original = site.url(language), site.url(default)
@@ -251,6 +238,32 @@ def _process_fallback(
 
         text = CANONICAL.sub(canonical, text, count=1)
     return text
+
+
+def _rewrite_edit_links(page: staging.Page, text: str) -> str:
+    """Point edit and view links of a page to its actual source.
+
+    Zensical links to the staged file, e.g., `docs/page.md`, which we replace
+    with the source the page was built from, e.g., `docs/pt/page.md` with the
+    folder structure, or `docs/page.pt.md` with the suffix structure.
+    """
+    if not page.source or page.source == page.src:
+        return text
+    variants = [
+        (page.src, page.source),
+        (staging.encode_url(page.src), staging.encode_url(page.source)),
+    ]
+
+    def rewrite(match: re.Match[str]) -> str:
+        element = match[0]
+        for src, source in variants:
+            index = element.rfind(f"/{src}")
+            if index >= 0:
+                start = index + 1
+                return element[:start] + source + element[start + len(src) :]
+        return element
+
+    return ACTION.sub(rewrite, text)
 
 
 def _process_sitemap(site: Site, language: Language) -> None:

@@ -1,0 +1,28 @@
+[project]
+site_name = "Docs"
+site_url = "https://example.com/docs/"
+repo_url = "https://github.com/o/r"
+edit_uri = "edit/main/docs/"
+nav = [
+  { "Home" = "index.md" },
+  { "Guide" = "guide/install.md" },
+]
+
+[project.theme]
+features = ["navigation.instant", "content.action.edit"]
+
+[project.plugins.i18n]
+
+[[project.plugins.i18n.languages]]
+locale = "en"
+name = "English"
+default = true
+
+[[project.plugins.i18n.languages]]
+locale = "pt"
+name = "Português"
+site_name = "Documentação"
+
+[project.plugins.i18n.languages.nav_translations]
+"Home" = "Início"
+"Guide" = "Guia"

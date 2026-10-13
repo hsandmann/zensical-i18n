@@ -85,8 +85,9 @@ class Source(NamedTuple):
 class Page(NamedTuple):
     """A page of a language."""
 
-    src: str  # path relative to the docs root, e.g., `guide/index.md`
+    src: str  # path in the staged docs folder, e.g., `guide/index.md`
     translated: bool
+    source: str = ""  # path in the docs folder, e.g., `guide/index.pt.md`
 
 
 # ----------------------------------------------------------------------------
@@ -97,14 +98,43 @@ class Page(NamedTuple):
 def collect(settings: Settings, language: Language) -> dict[Path, Source]:
     """Collect the files of a language's staged docs folder.
 
+    Depending on the docs structure, translations are files with the locale
+    as a suffix, e.g., `page.pt.md`, or files in a folder named after the
+    locale, e.g., `pt/page.md`. Pages missing in a language are taken from
+    the default language, if falling back to it, and marked as fallbacks.
+    """
+    docs_dir = settings.docs_dir
+    if not docs_dir.is_dir():
+        raise I18nError(f"Docs directory does not exist: {docs_dir}")
+    if settings.docs_structure == "folder":
+        return _collect_folder(settings, language)
+    return _collect_suffix(settings, language)
+
+
+def split_suffix(rel: Path, locales: set[str]) -> tuple[Path, str | None]:
+    """Split the locale suffix off a file name, e.g., `page.pt.md`.
+
+    Only configured locales are suffixes, so names like `app.min.js` are left
+    untouched. Returns the path without suffix, and the locale, if any.
+    """
+    parts = rel.name.split(".")
+    if len(parts) >= 3 and parts[0] and parts[-2] in locales:  # noqa: PLR2004
+        name = ".".join([*parts[:-2], parts[-1]])
+        return rel.with_name(name), parts[-2]
+    return rel, None
+
+
+def _collect_folder(
+    settings: Settings, language: Language
+) -> dict[Path, Source]:
+    """Collect files of a language with the folder structure.
+
     The staged folder is the union of three layers, with later layers taking
     precedence: shared files outside of any locale folder, the files of the
     default language (if falling back to it), and the language's own files.
     Each locale folder is thus treated as the docs root.
     """
     docs_dir = settings.docs_dir
-    if not docs_dir.is_dir():
-        raise I18nError(f"Docs directory does not exist: {docs_dir}")
 
     # Ensure locale folders match locales exactly, or they'd be shared files
     # on case-sensitive file systems, and clash on case-insensitive ones
@@ -144,6 +174,48 @@ def collect(settings: Settings, language: Language) -> dict[Path, Source]:
     return files
 
 
+def _collect_suffix(
+    settings: Settings, language: Language
+) -> dict[Path, Source]:
+    """Collect files of a language with the suffix structure.
+
+    Files without suffix belong to the default language, and files suffixed
+    with a locale are its translations, e.g., `page.pt.md` for `page.md`. A
+    language gets its own files, then those suffixed with the default locale,
+    then those without suffix, like in mkdocs-static-i18n. Pages of the default
+    language are fallbacks in other languages, while other files, e.g., images,
+    are shared by all languages.
+    """
+    docs_dir = settings.docs_dir
+    locales = {lang.locale for lang in settings.languages}
+    default = settings.default.locale
+
+    # Group files by their path without suffix
+    variants: dict[Path, dict[str | None, Path]] = {}
+    for path in _walk(docs_dir):
+        rel, locale = split_suffix(path.relative_to(docs_dir), locales)
+        variants.setdefault(rel, {})[locale] = path
+
+    # Pick the variant of each file for the language
+    files: dict[Path, Source] = {}
+    for rel, paths in sorted(variants.items()):
+        if language.locale in paths:
+            files[rel] = Source(paths[language.locale])
+            continue
+
+        # Use the default language's variant, which is a fallback for pages
+        path = paths.get(default) or paths.get(None)
+        if path is None:
+            continue
+        if language.default or rel.suffix != ".md":
+            files[rel] = Source(path)
+        elif settings.fallback_to_default:
+            files[rel] = Source(path, default)
+
+    # Return collected files
+    return files
+
+
 def manifest(settings: Settings) -> bytes:
     """Generate the manifest of the pages of all languages.
 
@@ -176,7 +248,11 @@ def page_sources(settings: Settings, language: Language) -> dict[str, Page]:
         url = page_url(rel, settings.directory_urls)
         if url is None:
             continue
-        page = Page(PurePosixPath(*rel.parts).as_posix(), not source.fallback)
+        page = Page(
+            PurePosixPath(*rel.parts).as_posix(),
+            not source.fallback,
+            _source_path(settings, source),
+        )
         if url not in result or (
             page.translated and not result[url].translated
         ):
@@ -283,6 +359,14 @@ def _write(source: Source, target: Path) -> bool:
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source.path, target)
     return True
+
+
+def _source_path(settings: Settings, source: Source) -> str:
+    """Return the path of a source in the docs folder."""
+    if source.path is None:
+        return ""
+    rel = source.path.relative_to(settings.docs_dir)
+    return PurePosixPath(*rel.parts).as_posix()
 
 
 def _same_stat(src: Path, target: Path) -> bool:

@@ -40,3 +40,10 @@ def project(tmp_path: Path) -> Path:
     """Copy the fixture project and return its config file."""
     shutil.copytree(FIXTURES / "project", tmp_path, dirs_exist_ok=True)
     return tmp_path / "zensical.toml"
+
+
+@pytest.fixture
+def suffix_project(tmp_path: Path) -> Path:
+    """Copy the fixture project with the suffix structure."""
+    shutil.copytree(FIXTURES / "suffix", tmp_path, dirs_exist_ok=True)
+    return tmp_path / "zensical.toml"

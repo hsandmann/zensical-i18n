@@ -12,6 +12,7 @@ nav = [
 features = ["navigation.instant"]
 
 [project.plugins.i18n]
+docs_structure = "folder"
 
 [[project.plugins.i18n.languages]]
 locale = "en"

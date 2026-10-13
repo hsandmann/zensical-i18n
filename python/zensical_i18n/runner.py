@@ -157,36 +157,27 @@ def _theme_language(locale: str, theme_dirs: list[str]) -> str:
 def _rewrite_edit_uri(
     config: dict, settings: Settings, language: Language
 ) -> None:
-    """Point edit and view links to the sources of the language.
+    """Point edit and view links to the docs folder of the project.
 
-    Zensical derives edit links from the docs folder, which is the staged one,
-    so we point them to the locale folder in the docs folder of the project.
-    Links of pages falling back to the default language are rewritten after
-    building, as they're the same setting for all pages.
+    Zensical derives default edit links from the docs folder, which is the
+    staged one, so we replace it with the docs folder of the project. Links
+    are pointed to the actual source of each page after building, e.g., to
+    `pt/page.md` or `page.pt.md`, as sources differ from staged files.
     """
     staged = settings.work_path("docs", language.locale).relative_to(
         settings.root
     )
     docs_rel = settings.docs_dir.resolve().relative_to(settings.root.resolve())
-    sources = (docs_rel / language.locale).as_posix()
 
-    # Default edit links include the staged docs folder, configured ones don't
+    # Zensical uses native separators, which are backslashes on Windows
     edit_uri = config.get("edit_uri")
     if isinstance(edit_uri, str) and edit_uri:
-        # Zensical uses native separators, which are backslashes on Windows
         for staged_rel in (staged.as_posix(), str(staged)):
             if staged_rel in edit_uri:
-                config["edit_uri"] = edit_uri.replace(staged_rel, sources)
+                config["edit_uri"] = edit_uri.replace(
+                    staged_rel, docs_rel.as_posix()
+                )
                 break
-        else:
-            config["edit_uri"] = f"{edit_uri.rstrip('/')}/{language.locale}"
-
-    # Edit link templates get the locale folder prepended to the path
-    template = config.get("edit_uri_template")
-    if isinstance(template, str) and template:
-        config["edit_uri_template"] = template.replace(
-            "{path", f"{language.locale}/{{path"
-        )
 
 
 def _prepare_theme(theme_dir: Path, theme_dirs: list[str]) -> None:
