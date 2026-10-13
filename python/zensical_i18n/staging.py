@@ -25,9 +25,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, NamedTuple
+from urllib.parse import quote
 
 from zensical_i18n.settings import I18nError, Language, Settings
 
@@ -43,6 +45,15 @@ FALLBACK_KEY = "i18n_fallback"
 
 # Manifest of the pages of each language, written to each language's root.
 MANIFEST = "zensical-i18n.json"
+
+# Front matter at the start of a page, which must be closed to be one.
+FRONT_MATTER = re.compile(
+    r"\A---[ \t]*\r?\n(?:.*?\r?\n)?(?:---|\.\.\.)[ \t]*\r?$",
+    re.DOTALL | re.MULTILINE,
+)
+
+# Byte order mark, which editors on Windows may add to the start of files.
+BOM = "\ufeff"
 
 # ----------------------------------------------------------------------------
 # Classes
@@ -64,7 +75,18 @@ class Source(NamedTuple):
             return None
         if self.path.suffix != ".md":
             return None
-        return mark_fallback(self.path.read_text("utf-8"), self.fallback)
+        try:
+            text = self.path.read_text("utf-8")
+        except UnicodeDecodeError:
+            return None  # Zensical will report the encoding
+        return mark_fallback(text, self.fallback)
+
+
+class Page(NamedTuple):
+    """A page of a language."""
+
+    src: str  # path relative to the docs root, e.g., `guide/index.md`
+    translated: bool
 
 
 # ----------------------------------------------------------------------------
@@ -84,8 +106,18 @@ def collect(settings: Settings, language: Language) -> dict[Path, Source]:
     if not docs_dir.is_dir():
         raise I18nError(f"Docs directory does not exist: {docs_dir}")
 
-    # Collect shared files, which are outside of all locale folders
+    # Ensure locale folders match locales exactly, or they'd be shared files
+    # on case-sensitive file systems, and clash on case-insensitive ones
     locales = {lang.locale for lang in settings.languages}
+    folded = {locale.casefold(): locale for locale in locales}
+    for entry in docs_dir.iterdir():
+        locale = folded.get(entry.name.casefold())
+        if locale and entry.name != locale:
+            raise I18nError(
+                f"Folder {entry} must be named '{locale}' like its locale."
+            )
+
+    # Collect shared files, which are outside of all locale folders
     files: dict[Path, Source] = {}
     for path in _walk(docs_dir):
         rel = path.relative_to(docs_dir)
@@ -131,12 +163,24 @@ def pages(settings: Settings, language: Language) -> dict[str, bool]:
     that fall back to the default language aren't translated, while shared
     pages, which are outside of all locale folders, are.
     """
-    result: dict[str, bool] = {}
-    for rel, source in collect(settings, language).items():
+    return {
+        url: page.translated
+        for url, page in page_sources(settings, language).items()
+    }
+
+
+def page_sources(settings: Settings, language: Language) -> dict[str, Page]:
+    """Return the pages of a language with their sources, by URL."""
+    result: dict[str, Page] = {}
+    for rel, source in sorted(collect(settings, language).items()):
         url = page_url(rel, settings.directory_urls)
-        if url is not None:
-            translated = source.fallback is None
-            result[url] = result.get(url, False) or translated
+        if url is None:
+            continue
+        page = Page(PurePosixPath(*rel.parts).as_posix(), not source.fallback)
+        if url not in result or (
+            page.translated and not result[url].translated
+        ):
+            result[url] = page
     return result
 
 
@@ -157,6 +201,15 @@ def page_url(rel: Path, directory_urls: bool) -> str | None:
     return f"{path}/" if directory_urls else f"{path}.html"
 
 
+def encode_url(url: str) -> str:
+    """Percent-encode a page URL the way Zensical does.
+
+    Zensical keeps the characters that are allowed in URL paths, except for
+    `&` and `~`, which allows to compare URLs with `page.url` in templates.
+    """
+    return quote(url, safe="/!$'()*+,;=:@").replace("~", "%7E")
+
+
 def page_urls(files: dict[Path, Source], directory_urls: bool) -> list[str]:
     """Return the URLs of pages, relative to the language root."""
     urls = {page_url(rel, directory_urls) for rel in files}
@@ -164,9 +217,14 @@ def page_urls(files: dict[Path, Source], directory_urls: bool) -> list[str]:
 
 
 def mark_fallback(text: str, locale: str) -> bytes:
-    """Add the fallback marker to the front matter of a page."""
+    """Add the fallback marker to the front matter of a page.
+
+    The marker is added to existing front matter, or as new front matter, if
+    the page has none - a leading `---` without a closing one is a rule.
+    """
+    text = text.removeprefix(BOM)
     line = f"{FALLBACK_KEY}: {locale}\n"
-    if text.startswith(("---\n", "---\r\n")):
+    if FRONT_MATTER.match(text):
         head, _, body = text.partition("\n")
         return f"{head}\n{line}{body}".encode()
     return f"---\n{line}---\n\n{text}".encode()
@@ -181,27 +239,27 @@ def sync(files: dict[Path, Source], dest: Path) -> bool:
     changed = False
     dest.mkdir(parents=True, exist_ok=True)
 
-    # Remove files that aren't part of the staged folder anymore
-    for path in list(_walk(dest)):
-        if path.relative_to(dest) not in files:
-            path.unlink()
-            changed = True
+    # Remove symbolic links, which we never create, so writes can't follow
+    # them outside of the folder, and files that aren't staged anymore
+    for dirpath, dirnames, filenames in os.walk(dest):
+        for name in [*dirnames, *filenames]:
+            path = Path(dirpath) / name
+            rel = path.relative_to(dest)
+            if path.is_symlink() or (name in filenames and rel not in files):
+                path.unlink()
+                changed = True
+        dirnames[:] = [
+            name for name in dirnames if (Path(dirpath) / name).is_dir()
+        ]
 
-    # Write generated content, or copy files that changed
+    # Write generated content, or copy files that changed - files may vanish
+    # while being synchronized, e.g., temporary files of editors
     for rel, source in files.items():
         target = dest / rel
-        content = source.content()
-        if content is not None:
-            if target.is_file() and target.read_bytes() == content:
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(content)
-        elif source.path is not None:
-            if _same_stat(source.path, target):
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source.path, target)
-        changed = True
+        try:
+            changed |= _write(source, target)
+        except FileNotFoundError:
+            continue
 
     # Remove empty folders, and return whether anything changed
     _remove_empty_dirs(dest)
@@ -211,13 +269,33 @@ def sync(files: dict[Path, Source], dest: Path) -> bool:
 # ----------------------------------------------------------------------------
 
 
+def _write(source: Source, target: Path) -> bool:
+    """Write a file, if it changed, returning whether it was written."""
+    content = source.content()
+    if content is not None:
+        if target.is_file() and target.read_bytes() == content:
+            return False
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        return True
+    if source.path is None or _same_stat(source.path, target):
+        return False
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source.path, target)
+    return True
+
+
 def _same_stat(src: Path, target: Path) -> bool:
-    """Check whether two files have the same size and modification time."""
+    """Check whether two files have the same size and modification time.
+
+    Modification times are compared in nanoseconds, which copying preserves,
+    so files changed within the same second are detected.
+    """
     try:
         a, b = src.stat(), target.stat()
     except FileNotFoundError:
         return False
-    return a.st_size == b.st_size and int(a.st_mtime) == int(b.st_mtime)
+    return a.st_size == b.st_size and a.st_mtime_ns == b.st_mtime_ns
 
 
 def _walk(root: Path) -> Iterator[Path]:

@@ -66,7 +66,7 @@ def overrides(settings: Settings, language: Language) -> dict[str, Any]:
     result: dict[str, Any] = {
         "docs_dir": str(work_dir / "docs" / language.locale),
         "site_dir": str(work_dir / "site" / language.locale),
-        "theme": {"language": language.locale, **language.theme},
+        "theme": dict(language.theme),
     }
 
     # Every language is published below the site URL of the project
@@ -80,25 +80,31 @@ def overrides(settings: Settings, language: Language) -> dict[str, Any]:
     if "nav" in project:
         result["nav"] = nav.translate(project["nav"], language.nav_translations)
 
-    # Configure the language selector and the untranslated page notice
+    # Configure the language selector and the untranslated page notice, and
+    # list languages that aren't built, but link to an external site
     extra = dict(language.extra)
     if settings.reconfigure_theme:
         links = [
             {
                 "name": other.name,
-                "lang": other.locale,
+                "lang": languages.hreflang(other.locale),
+                "locale": other.locale,
                 "link": _link(language, other),
             }
-            for other in settings.built
+            for other in settings.languages
+            if other.build or other.link
         ]
         extra["alternate"] = links
         extra["i18n"] = {
             "locale": language.locale,
-            "default": settings.default.locale,
+            "lang": languages.hreflang(language.locale),
             "manifest": staging.MANIFEST,
             "languages": links,
             "pages": {
-                lang.locale: sorted(staging.pages(settings, lang))
+                lang.locale: sorted(
+                    staging.encode_url(url)
+                    for url in staging.pages(settings, lang)
+                )
                 for lang in settings.built
             },
             "notice": languages.notice(
@@ -131,7 +137,7 @@ def stage(settings: Settings, language: Language) -> None:
     if settings.reconfigure_theme:
         data = staging.manifest(settings)
         files[Path(staging.MANIFEST)] = staging.Source(data=data)
-    staging.sync(files, settings.work_dir / "docs" / language.locale)
+    staging.sync(files, settings.work_path("docs", language.locale))
 
 
 def build(
@@ -171,28 +177,35 @@ def assemble(settings: Settings, selected: list[Language]) -> None:
     """Assemble the site, with the default language at the root.
 
     Other languages are placed in folders named after their locale. When only
-    some languages were built, the outputs of the others are left untouched.
+    some languages were built, the outputs of the others are left untouched,
+    while folders of languages that aren't built anymore are removed.
     """
     site_dir = settings.site_dir
-    outputs = settings.work_dir / "site"
-    locales = {lang.locale for lang in settings.languages if not lang.default}
+    locales = {lang.locale for lang in settings.built if not lang.default}
 
-    # Copy default language, keeping the folders of other languages
+    # Copy default language, keeping the folders of other languages, as well
+    # as hidden files like .git or .nojekyll, which Zensical keeps as well
     default = settings.default
     if default in selected:
-        clashes = {p.name for p in (outputs / default.locale).iterdir()}
-        clashes &= locales
+        output = settings.work_path("site", default.locale)
+        all_locales = {lang.locale.casefold() for lang in settings.languages}
+        clashes = {
+            path.name
+            for path in output.iterdir()
+            if path.name.casefold() in all_locales
+        }
         if clashes:
             raise I18nError(
                 f"Output of the default language contains {sorted(clashes)}, "
                 "which clash with the folders of other languages."
             )
-        _replace(outputs / default.locale, site_dir, keep=locales)
+        _replace(output, site_dir, keep=locales, keep_hidden=True)
 
     # Copy other languages
     for language in selected:
         if not language.default:
-            _replace(outputs / language.locale, site_dir / language.locale)
+            output = settings.work_path("site", language.locale)
+            _replace(output, site_dir / language.locale)
 
     # Declare translations to search engines and LLMs
     discovery.publish(settings)
@@ -227,6 +240,10 @@ def serve(
         )
         _watch(settings, language, child, interval)
 
+    # Report if Zensical failed, e.g., as the address is already in use
+    if child.returncode not in (0, 130, -signal.SIGINT, -signal.SIGTERM):
+        raise I18nError(f"Zensical exited with status {child.returncode}.")
+
 
 @contextmanager
 def cache(settings: Settings, language: Language) -> Generator[None]:
@@ -238,21 +255,24 @@ def cache(settings: Settings, language: Language) -> Generator[None]:
     The swapped in language is recorded, so an interrupted run is recovered.
     """
     current = settings.root / CACHE_DIR
-    caches = settings.work_dir / "cache"
+    caches = settings.work_path("cache")
     caches.mkdir(parents=True, exist_ok=True)
-    _restore_cache(current, caches)
+    locales = {lang.locale for lang in settings.languages}
+    _restore_cache(current, caches, locales)
+
+    # Record the language first, so an interruption at any point is recovered
+    caches.joinpath(CACHE_ACTIVE).write_text(language.locale)
 
     # Stash the project's cache, and swap in the language's cache
-    if current.exists():
+    if current.exists() or current.is_symlink():
         current.rename(caches / CACHE_PROJECT)
-    stored = caches / language.locale
+    stored = settings.work_path("cache", language.locale)
     if stored.exists():
         stored.rename(current)
-    caches.joinpath(CACHE_ACTIVE).write_text(language.locale)
     try:
         yield
     finally:
-        _restore_cache(current, caches)
+        _restore_cache(current, caches, locales)
 
 
 # ----------------------------------------------------------------------------
@@ -269,6 +289,8 @@ def _watch(
     try:
         while child.poll() is None:
             time.sleep(interval)
+            # Keep serving on errors, e.g., when the config file is saved with
+            # a syntax error, which Zensical reports as well
             try:
                 mtime = settings.config_file.stat().st_mtime
                 if mtime != config_mtime:
@@ -276,7 +298,7 @@ def _watch(
                     settings = load_settings(settings.config_file)
                     language = settings.language(language.locale)
                 stage(settings, language)
-            except I18nError as e:
+            except Exception as e:  # noqa: BLE001
                 click.echo(f"Error: {e}")
     except KeyboardInterrupt:
         pass
@@ -286,12 +308,17 @@ def _watch(
             child.wait()
 
 
-def _restore_cache(current: Path, caches: Path) -> None:
-    """Store the swapped in language cache, and restore the project's."""
+def _restore_cache(current: Path, caches: Path, locales: set[str]) -> None:
+    """Store the swapped in language cache, and restore the project's.
+
+    The marker is only trusted if it names a known locale, as its contents
+    determine which folder is replaced.
+    """
     marker = caches / CACHE_ACTIVE
     if marker.exists():
-        stored = caches / marker.read_text().strip()
-        if current.exists():
+        locale = marker.read_text(encoding="utf-8").strip()
+        stored = caches / locale
+        if locale in locales and not stored.is_symlink() and current.exists():
             if stored.exists():
                 shutil.rmtree(stored)
             current.rename(stored)
@@ -299,9 +326,9 @@ def _restore_cache(current: Path, caches: Path) -> None:
 
     # If the project has a newer cache, the stashed one is stale
     project = caches / CACHE_PROJECT
-    if project.exists():
-        if current.exists():
-            shutil.rmtree(project)
+    if project.exists() or project.is_symlink():
+        if current.exists() or current.is_symlink():
+            _remove(project)
         else:
             project.rename(current)
 
@@ -317,9 +344,14 @@ def _link(current: Language, target: Language) -> str:
 def _command(
     command: str, settings: Settings, language: Language, options: dict
 ) -> list[str]:
-    """Return the command to run Zensical for a language."""
+    """Return the command to run Zensical for a language.
+
+    Python is run with `-P`, so modules in the project root, which is the
+    working directory, can't shadow installed modules and run on import.
+    """
     return [
         sys.executable,
+        "-P",
         "-m",
         "zensical_i18n.runner",
         command,
@@ -329,14 +361,29 @@ def _command(
     ]
 
 
-def _replace(src: Path, dest: Path, keep: set[str] | None = None) -> None:
+def _replace(
+    src: Path,
+    dest: Path,
+    keep: set[str] | None = None,
+    *,
+    keep_hidden: bool = False,
+) -> None:
     """Replace the contents of a folder, except for the given entries."""
+    if dest.is_symlink():
+        raise I18nError(f"Refusing to replace symbolic link: {dest}")
     if dest.exists():
         for path in dest.iterdir():
             if keep and path.name in keep:
                 continue
-            if path.is_dir() and not path.is_symlink():
-                shutil.rmtree(path)
-            else:
-                path.unlink()
+            if keep_hidden and path.name.startswith("."):
+                continue
+            _remove(path)
     shutil.copytree(src, dest, dirs_exist_ok=True)
+
+
+def _remove(path: Path) -> None:
+    """Remove a file or folder, without following symbolic links."""
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
