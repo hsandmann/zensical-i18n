@@ -146,7 +146,7 @@ def test_manifest(site: Path) -> None:
 
 def test_site_url(site: Path) -> None:
     sitemap = site.joinpath("pt/sitemap.xml").read_text()
-    assert "https://example.com/docs/pt/guide/install/" in sitemap
+    assert "https://example.com/docs/pt/extra/" in sitemap
 
 
 def test_rebuild(project: Path, site: Path) -> None:
@@ -214,3 +214,18 @@ def test_admonitions(site: Path) -> None:
     assert titles("pt/index.html") == ["Nota"]
     assert titles("pt/guide/install/index.html") == ["Nota", "Custom tip"]
     assert titles("guide/install/index.html") == ["Note", "Custom tip"]
+
+
+def test_selector_links_to_translations(site: Path) -> None:
+    soup = _page(site, "pt/guide/install/index.html")
+    links = {
+        str(a["hreflang"]): str(a["href"])
+        for a in soup.select("a[data-md-i18n-root]")
+    }
+    assert links["en"] == "../../../guide/install/"
+
+
+def test_fallback_content_language(site: Path) -> None:
+    soup = _page(site, "pt/guide/install/index.html")
+    assert _select(soup, ".md-i18n-fallback")["lang"] == "en"
+    assert _page(site, "pt/index.html").select_one(".md-i18n-fallback") is None

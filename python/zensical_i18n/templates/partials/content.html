@@ -7,5 +7,11 @@
 -#}
 {% if page.meta and page.meta.i18n_fallback and config.extra.i18n %}
   {% include "partials/i18n/notice.html" %}
+  {#- Mark the content with its language, so screen readers, crawlers and
+      LLMs know it's not in the language of the site -#}
+  <div class="md-i18n-fallback" lang="{{ page.meta.i18n_fallback }}">
+    {% include "partials/i18n/original-content.html" %}
+  </div>
+{% else %}
+  {% include "partials/i18n/original-content.html" %}
 {% endif %}
-{% include "partials/i18n/original-content.html" %}

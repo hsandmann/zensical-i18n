@@ -16,6 +16,9 @@ Multi-language sites for [Zensical], configured like [mkdocs-static-i18n].
 - **Translated admonitions** – default titles of admonitions like
   `!!! note` are translated, e.g., to "Nota" in Portuguese, out of the box
   for over 20 languages.
+- **Search engines and LLMs** – translations are declared in hreflang
+  sitemaps, untranslated pages point to their originals, and the llms.txt
+  files of all languages link to each other.
 
 > [!NOTE]
 > Zensical doesn't support multi-language sites or third-party plugins yet.
@@ -187,6 +190,31 @@ todo = "Tarefa"
 
 An explicit title that equals the default title, like `!!! note "Note"`, is
 indistinguishable from a default title, and thus translated as well.
+
+## Search engines and LLMs
+
+When `site_url` is set, zensical-i18n makes the translations of a site
+discoverable by search engines, crawlers and LLMs:
+
+- **hreflang sitemaps** – the sitemap of each language lists the
+  translations of every page, including an `x-default` pointing to the
+  default language, which search engines treat like hreflang links in the
+  head of pages.
+- **Canonical URLs** – pages falling back to the default language are copies
+  of the original, so their canonical URL points to it, and they're left out
+  of sitemaps, avoiding duplicate content.
+- **Language of content** – the content of fallback pages is marked with the
+  language it's written in, e.g., `lang="en"` on a Portuguese site, for
+  screen readers, crawlers and LLMs.
+- **Links without JavaScript** – the language selector links to the same
+  page in other languages in the HTML itself, so crawlers follow them.
+- **llms.txt** – with Zensical's `llmstxt` plugin enabled, each language gets
+  its own llms.txt, and zensical-i18n adds a "Languages" section linking to
+  the llms.txt of all other languages.
+
+The theme adds links to the home pages of all languages to the head of every
+page, which would declare every page a translation of a home page. As the
+sitemaps declare the actual translations, zensical-i18n removes these links.
 
 ## How it works
 
