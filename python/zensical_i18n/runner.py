@@ -35,7 +35,7 @@ from zensical_i18n.builder import admonitions, overrides
 from zensical_i18n.extensions.admonition import (
     AdmonitionTranslationsExtension,
 )
-from zensical_i18n.languages import hreflang
+from zensical_i18n.languages import direction, tags
 from zensical_i18n.settings import Language, Settings, load_settings
 from zensical_i18n.staging import Source, sync
 
@@ -87,11 +87,15 @@ def install(locale: str) -> None:
         merge(config, overrides(settings, language))
         config = apply_defaults(config, path)
 
-        # Set the language of the theme, unless set for the language
+        # Set the language of the theme, unless set for the language, and the
+        # text direction, if the theme doesn't know the language
         if "language" not in language.theme:
-            config["theme"]["language"] = _theme_language(
-                locale, config["theme_dirs"]
-            )
+            theme_language = _theme_language(locale, config["theme_dirs"])
+            config["theme"]["language"] = theme_language
+            if theme_language not in tags(locale) and not config["theme"].get(
+                "direction"
+            ):
+                config["theme"]["direction"] = direction(locale)
 
         # Point edit links to the sources of the language
         _rewrite_edit_uri(config, settings, language)
@@ -140,8 +144,7 @@ def _theme_language(locale: str, theme_dirs: list[str]) -> str:
     back to the primary language, e.g., `fr` for `fr_CA`, and then English,
     instead of failing the build.
     """
-    tag = hreflang(locale)
-    for candidate in (locale, tag, tag.split("-")[0]):
+    for candidate in (locale, *tags(locale)):
         for path in theme_dirs:
             partial = (
                 Path(path) / "partials" / "languages" / f"{candidate}.html"
@@ -161,16 +164,20 @@ def _rewrite_edit_uri(
     Links of pages falling back to the default language are rewritten after
     building, as they're the same setting for all pages.
     """
-    staged = settings.work_path("docs", language.locale)
-    staged_rel = staged.relative_to(settings.root).as_posix()
+    staged = settings.work_path("docs", language.locale).relative_to(
+        settings.root
+    )
     docs_rel = settings.docs_dir.resolve().relative_to(settings.root.resolve())
     sources = (docs_rel / language.locale).as_posix()
 
     # Default edit links include the staged docs folder, configured ones don't
     edit_uri = config.get("edit_uri")
     if isinstance(edit_uri, str) and edit_uri:
-        if staged_rel in edit_uri:
-            config["edit_uri"] = edit_uri.replace(staged_rel, sources)
+        # Zensical uses native separators, which are backslashes on Windows
+        for staged_rel in (staged.as_posix(), str(staged)):
+            if staged_rel in edit_uri:
+                config["edit_uri"] = edit_uri.replace(staged_rel, sources)
+                break
         else:
             config["edit_uri"] = f"{edit_uri.rstrip('/')}/{language.locale}"
 

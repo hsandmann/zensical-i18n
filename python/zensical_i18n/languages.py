@@ -23,6 +23,11 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
 # ----------------------------------------------------------------------------
 # Constants
 # ----------------------------------------------------------------------------
@@ -399,23 +404,41 @@ RTL = frozenset(
 def notice(locale: str, language: str, template: str | None = None) -> str:
     """Return the untranslated page notice for the given locale.
 
-    Locales are matched exactly first, then by their primary subtag, so that
-    `pt-BR` uses `pt`, falling back to English.
+    Locales are matched with `lookup`, so that `pt-BR` uses `pt`, falling
+    back to English.
     """
     if template is None:
-        primary = locale.replace("_", "-").split("-")[0]
-        template = NOTICES.get(locale, NOTICES.get(primary, NOTICES["en"]))
+        template = NOTICES[lookup(locale, NOTICES) or "en"]
     return template.replace("{language}", language)
 
 
 def admonitions(locale: str) -> dict[str, str]:
     """Return the default admonition titles for the given locale.
 
-    Locales are matched exactly first, then by their primary subtag. There
-    are no defaults for English, as titles are derived from the types.
+    Locales are matched with `lookup`. There are no defaults for English, as
+    titles are derived from the types.
     """
-    primary = locale.replace("_", "-").split("-")[0]
-    return dict(ADMONITIONS.get(locale, ADMONITIONS.get(primary, {})))
+    key = lookup(locale, ADMONITIONS)
+    return dict(ADMONITIONS[key]) if key else {}
+
+
+def lookup(locale: str, keys: Iterable[str]) -> str | None:
+    """Return the best matching key for a locale, if any.
+
+    The locale is normalized to a language tag, which is shortened subtag by
+    subtag, e.g., `zh_Hant_TW` matches `zh-Hant-TW`, `zh-Hant`, then `zh`.
+    """
+    available = set(keys)
+    for tag in tags(locale):
+        if tag in available:
+            return tag
+    return None
+
+
+def tags(locale: str) -> list[str]:
+    """Return a locale's language tag, shortened subtag by subtag."""
+    parts = hreflang(locale).split("-")
+    return ["-".join(parts[:index]) for index in range(len(parts), 0, -1)]
 
 
 def hreflang(locale: str) -> str:

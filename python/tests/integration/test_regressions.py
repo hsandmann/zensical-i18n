@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from urllib.parse import urljoin
 from xml.etree import ElementTree
 
 from bs4 import BeautifulSoup
@@ -174,7 +175,7 @@ def test_regional_locale(project: Path) -> None:
     site = _build(project)
     soup = _soup(site / "fr_CA/index.html")
     assert soup.html is not None
-    assert soup.html["lang"] == "fr"
+    assert soup.html["lang"] == "fr-CA"
     link = soup.select_one("a[data-md-i18n-locale=fr_CA]")
     assert link is not None
     assert link["hreflang"] == "fr-CA"
@@ -255,3 +256,50 @@ def test_translations_trigger_rebuild(project: Path) -> None:
     builder.build(load_settings(project), only=["pt"])
     titles = _soup(site / "pt/index.html").select(".admonition-title")
     assert [title.get_text() for title in titles] == ["Observação"]
+
+
+def test_unknown_rtl_locale(project: Path) -> None:
+    config = project.read_text().replace('locale = "pt"', 'locale = "ckb"')
+    project.write_text(config)
+    (project.parent / "docs/pt").rename(project.parent / "docs/ckb")
+    site = _build(project)
+
+    # The theme falls back to English, but language and direction are kept
+    soup = _soup(site / "ckb/guide/install/index.html")
+    assert soup.html is not None
+    assert soup.html["lang"] == "ckb"
+    assert soup.body is not None
+    assert soup.body["dir"] == "rtl"
+
+    # The notice is in the language of the site, the content isn't
+    notice = soup.select_one(".md-i18n-notice")
+    article = soup.select_one("article")
+    assert notice is not None
+    assert article is not None
+    assert (notice["lang"], notice["dir"]) == ("ckb", "rtl")
+    assert (article["lang"], article["dir"]) == ("en", "ltr")
+
+
+def test_regional_html_lang(project: Path) -> None:
+    config = project.read_text().replace('locale = "pt"', 'locale = "pt_BR"')
+    project.write_text(config)
+    (project.parent / "docs/pt").rename(project.parent / "docs/pt_BR")
+    site = _build(project)
+    soup = _soup(site / "pt_BR/index.html")
+    assert soup.html is not None
+    assert soup.html["lang"] == "pt-BR"
+
+
+def test_404_without_site_url(project: Path) -> None:
+    config = project.read_text().replace(f'site_url = "{BASE}"\n', "")
+    project.write_text(config)
+    site = _build(project)
+    soup = _soup(site / "pt/404.html")
+    root = soup.select_one("[data-md-i18n]")
+    assert root is not None
+    assert root["data-md-i18n-base"] == "/pt/"
+    links = {
+        str(a["data-md-i18n-locale"]): urljoin("https://x/", str(a["href"]))
+        for a in soup.select("a[data-md-i18n-locale]")
+    }
+    assert links == {"en": "https://x/", "pt": "https://x/pt/"}

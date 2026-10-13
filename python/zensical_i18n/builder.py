@@ -98,6 +98,8 @@ def overrides(settings: Settings, language: Language) -> dict[str, Any]:
         extra["i18n"] = {
             "locale": language.locale,
             "lang": languages.hreflang(language.locale),
+            "dir": languages.direction(language.locale),
+            "prefix": f"{language.prefix}/" if language.prefix else "",
             "manifest": staging.MANIFEST,
             "languages": links,
             "pages": {
@@ -260,12 +262,11 @@ def cache(settings: Settings, language: Language) -> Generator[None]:
     locales = {lang.locale for lang in settings.languages}
     _restore_cache(current, caches, locales)
 
-    # Record the language first, so an interruption at any point is recovered
-    caches.joinpath(CACHE_ACTIVE).write_text(language.locale)
-
-    # Stash the project's cache, and swap in the language's cache
+    # Stash the project's cache, record the language, and only then swap in
+    # the language's cache, so an interruption at any point is recovered
     if current.exists() or current.is_symlink():
         current.rename(caches / CACHE_PROJECT)
+    caches.joinpath(CACHE_ACTIVE).write_text(language.locale, encoding="utf-8")
     stored = settings.work_path("cache", language.locale)
     if stored.exists():
         stored.rename(current)
@@ -316,7 +317,7 @@ def _restore_cache(current: Path, caches: Path, locales: set[str]) -> None:
     """
     marker = caches / CACHE_ACTIVE
     if marker.exists():
-        locale = marker.read_text(encoding="utf-8").strip()
+        locale = marker.read_text(encoding="utf-8")
         stored = caches / locale
         if locale in locales and not stored.is_symlink() and current.exists():
             if stored.exists():

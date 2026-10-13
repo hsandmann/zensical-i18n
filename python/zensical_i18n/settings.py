@@ -287,6 +287,8 @@ def _validate_dirs(settings: Settings) -> None:
         raise I18nError(
             f"site_dir must be a folder within project root: {site_dir}"
         )
+    if site_dir.relative_to(root).parts[0].startswith("."):
+        raise I18nError(f"site_dir must not be a hidden folder: {site_dir}")
 
     # Ensure the site folder doesn't overlap with the docs or work folder
     for name, path in (("docs_dir", docs_dir), (WORK_DIR, work_dir)):
@@ -301,7 +303,7 @@ def _parse_language(entry: Any) -> Language:
 
     # Locales are used as folder names and in markup, so they must be tags
     locale = entry["locale"]
-    if not isinstance(locale, str) or not LOCALE.match(locale):
+    if not isinstance(locale, str) or not LOCALE.fullmatch(locale):
         raise I18nError(
             f"Invalid locale: {locale!r}. Use a language tag like 'en' or "
             "'pt-BR', and quote it in YAML, as, e.g., `no` is a boolean."
