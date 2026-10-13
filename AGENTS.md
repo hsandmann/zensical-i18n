@@ -36,6 +36,8 @@ All four checks run in CI on Python 3.11 to 3.14 and must pass.
     fallback pages, llms.txt links between languages
   - `extensions/admonition.py` – Python-Markdown extension translating
     default admonition titles
+  - `extensions/suffix.py` – Python-Markdown extension resolving links to
+    files with a locale suffix
   - `languages.py` – built-in translations (notice, admonition titles)
   - `templates/partials/` – language selector, untranslated notice
 - `python/tests/` – `unit/`, `integration/` (real builds), `fixtures/project/`
@@ -68,6 +70,12 @@ All four checks run in CI on Python 3.11 to 3.14 and must pass.
   use `staging.encode_url` to match `page.url` in templates.
 - Escape every configured string rendered into HTML (`| e`), and validate
   values used in markup or paths in `settings.py` (locales, links).
+- Fix links when rendering (templates, Markdown extensions) where possible,
+  as `serve` doesn't post-process pages, e.g., edit links are rewritten by
+  `templates/partials/actions.html` using `extra.i18n_edits`.
+- Code running in the runner (settings, staging, overrides) runs in every
+  child process: collect warnings in `Settings.warnings` or
+  `staging.check`, which the builder prints once per run.
 
 ## Conventions
 
