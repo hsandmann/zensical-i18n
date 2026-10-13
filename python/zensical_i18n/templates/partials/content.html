@@ -5,13 +5,10 @@
   Wraps the content partial of the theme in use, adding a notice to pages
   that aren't translated and fall back to the default language.
 -#}
+{#- The language of the content of fallback pages is set on the article
+    element when building, as wrapping the content would break the theme's
+    layout rules for its direct children -#}
 {% if page.meta and page.meta.i18n_fallback and config.extra.i18n %}
   {% include "partials/i18n/notice.html" %}
-  {#- Mark the content with its language, so screen readers, crawlers and
-      LLMs know it's not in the language of the site -#}
-  <div class="md-i18n-fallback" lang="{{ page.meta.i18n_fallback }}">
-    {% include "partials/i18n/original-content.html" %}
-  </div>
-{% else %}
-  {% include "partials/i18n/original-content.html" %}
 {% endif %}
+{% include "partials/i18n/original-content.html" %}

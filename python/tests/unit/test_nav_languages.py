@@ -73,3 +73,10 @@ def test_admonitions_cover_all_types() -> None:
     for locale, titles in languages.ADMONITIONS.items():
         assert set(titles) == types, locale
         assert all(titles.values()), locale
+
+
+def test_hreflang_and_direction() -> None:
+    assert languages.hreflang("pt_BR") == "pt-BR"
+    assert languages.direction("ar") == "rtl"
+    assert languages.direction("he-IL") == "rtl"
+    assert languages.direction("en") == "ltr"

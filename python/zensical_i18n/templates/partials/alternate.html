@@ -16,13 +16,15 @@
     {% set chevron = "material/chevron-down" %}
   {% endif %}
   {% set icon = config.theme.icon.alternate or "material/translate" %}
-  <div class="md-header__option md-i18n" data-md-i18n data-md-i18n-base="{{ base_url }}/" data-md-i18n-manifest="{{ base_url }}/{{ i18n.manifest }}">
+  {#- The base URL is absolute on some pages, e.g., 404 pages -#}
+  {% set root = (base_url ~ "/") | replace("//", "/") %}
+  <div class="md-header__option md-i18n" data-md-i18n data-md-i18n-base="{{ root }}" data-md-i18n-manifest="{{ root }}{{ i18n.manifest }}">
     <div class="md-select">
-      <button class="md-header__button md-i18n__button" aria-label="{{ lang.t('select.language') }}">
+      <button class="md-header__button md-i18n__button" aria-label="{{ lang.t('select.language') }} ({{ i18n.lang }})">
         <span class="md-icon">
           {% include ".icons/" ~ icon ~ ".svg" %}
         </span>
-        <span class="md-i18n__code" lang="{{ i18n.locale }}">{{ i18n.locale }}</span>
+        <span class="md-i18n__code" lang="{{ i18n.lang }}">{{ i18n.lang }}</span>
         <span class="md-i18n__chevron md-icon">
           {% include ".icons/" ~ chevron ~ ".svg" %}
         </span>
@@ -30,16 +32,17 @@
       <div class="md-select__inner md-i18n__inner">
         <ul class="md-select__list md-i18n__list">
           {% for alt in i18n.languages %}
-            {% set current = alt.lang == i18n.locale %}
+            {% set current = alt.locale == i18n.locale %}
             {#- Link to the current page, if it exists in the language, so
-                crawlers and readers without JavaScript find translations -#}
+                crawlers and readers without JavaScript find translations.
+                Languages that aren't built only have pages on their site -#}
             {% set href = alt.link %}
-            {% if page and "://" not in alt.link and page.url in i18n.pages[alt.lang] %}
+            {% if page and alt.locale in i18n.pages and page.url in i18n.pages[alt.locale] %}
               {% set href = alt.link ~ page.url %}
             {% endif %}
             <li class="md-select__item">
-              <a href="{{ href | url }}" hreflang="{{ alt.lang }}" lang="{{ alt.lang }}" class="md-select__link md-i18n__link" target="_self" data-md-i18n-root="{{ alt.link }}" {% if current %}aria-current="true"{% endif %}>
-                <span class="md-i18n__name">{{ alt.name }}</span>
+              <a href="{{ href | url | e }}" hreflang="{{ alt.lang }}" lang="{{ alt.lang }}" class="md-select__link md-i18n__link" target="_self" data-md-i18n-locale="{{ alt.locale }}" data-md-i18n-root="{{ alt.link | e }}" {% if current %}aria-current="true"{% endif %}>
+                <span class="md-i18n__name">{{ alt.name | e }}</span>
                 <span class="md-i18n__locale">{{ alt.lang }}</span>
                 <span class="md-i18n__check md-icon">
                   {% include ".icons/" ~ check ~ ".svg" %}

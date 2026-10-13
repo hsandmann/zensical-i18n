@@ -10,9 +10,9 @@
 {% else %}
   {% set icon = "material/information-outline" %}
 {% endif %}
-<aside class="md-i18n-notice" role="note" lang="{{ config.extra.i18n.locale }}">
+<aside class="md-i18n-notice" role="note" lang="{{ config.extra.i18n.lang }}">
   <span class="md-icon">
     {% include ".icons/" ~ icon ~ ".svg" %}
   </span>
-  <p>{{ config.extra.i18n.notice }}</p>
+  <p>{{ config.extra.i18n.notice | e }}</p>
 </aside>

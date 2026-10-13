@@ -42,9 +42,10 @@ class AdmonitionTranslationsTreeprocessor(Treeprocessor):
 
     Admonitions without an explicit title get one derived from their type,
     e.g., `Note` for `note`, which we replace with its translation. Explicit
-    titles are left untouched, as are admonitions without a title. This works
-    for all syntaxes, i.e., `!!!`, `???` and `///` blocks, as they all render
-    to the same structure.
+    titles are left untouched, unless they're equal to the derived title, as
+    they're indistinguishable after rendering, as are admonitions without a
+    title. This works for all syntaxes, i.e., `!!!`, `???` and `///` blocks,
+    as they all render to the same structure.
     """
 
     name = "zensical_i18n.admonition"

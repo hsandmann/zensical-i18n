@@ -49,8 +49,7 @@
     border-radius: .3rem;
     line-height: 1.6rem;
   }
-  .md-i18n .md-i18n__link:is(:hover, :focus-visible) {
-    color: var(--md-default-fg-color);
+  .md-i18n .md-i18n__link:is(:hover, :focus) {
     background-color: var(--md-default-fg-color--lightest);
   }
   .md-i18n__name {
@@ -101,8 +100,18 @@
     margin-top: .1rem;
     color: var(--md-accent-fg-color);
   }
-  .md-i18n-fallback {
-    display: contents;
+  @media screen and (max-width: 59.984375em) {
+    [dir=rtl] .md-i18n .md-select__inner {
+      left: 0;
+      transform: translate3d(0, .3rem, 0);
+    }
+    [dir=rtl] .md-i18n .md-select:is(:hover, :focus-within) .md-select__inner {
+      transform: translate3d(0, 0, 0);
+    }
+    [dir=rtl] .md-i18n .md-select__inner::after {
+      right: auto;
+      left: 1rem;
+    }
   }
   @media print {
     .md-typeset .md-i18n-notice {

@@ -86,9 +86,9 @@ def test_sitemap_alternates(project: Path) -> None:
     assert _sitemap(site / "pt/sitemap.xml")[f"{BASE}pt/"] == alternates
 
     # Pages without translations have no alternates, and pages falling back
-    # to the default language are left out
+    # to the default language are kept for instant navigation, but have none
     assert _sitemap(site / "sitemap.xml")[f"{BASE}guide/install/"] == {}
-    assert f"{BASE}pt/guide/install/" not in _sitemap(site / "pt/sitemap.xml")
+    assert _sitemap(site / "pt/sitemap.xml")[f"{BASE}pt/guide/install/"] == {}
     assert _sitemap(site / "pt/sitemap.xml")[f"{BASE}pt/extra/"] == {}
 
 
