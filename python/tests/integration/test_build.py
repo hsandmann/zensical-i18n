@@ -226,6 +226,14 @@ def test_selector_links_to_translations(site: Path) -> None:
 
 
 def test_fallback_content_language(site: Path) -> None:
-    soup = _page(site, "pt/guide/install/index.html")
-    assert _select(soup, ".md-i18n-fallback")["lang"] == "en"
-    assert _page(site, "pt/index.html").select_one(".md-i18n-fallback") is None
+    article = _select(_page(site, "pt/guide/install/index.html"), "article")
+    assert article["lang"] == "en"
+    assert article["dir"] == "ltr"
+
+    # The notice is in the language of the site
+    notice = _select(_page(site, "pt/guide/install/index.html"), "aside")
+    assert notice["lang"] == "pt"
+
+    # Translated pages aren't marked
+    article = _select(_page(site, "pt/index.html"), "article")
+    assert not article.has_attr("lang")

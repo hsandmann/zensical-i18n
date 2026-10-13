@@ -386,6 +386,11 @@ ADMONITIONS = {
     },
 }
 
+# Primary subtags of languages written from right to left.
+RTL = frozenset(
+    ("ar", "ckb", "dv", "fa", "he", "ku", "ps", "sd", "ug", "ur", "yi")
+)
+
 # ----------------------------------------------------------------------------
 # Functions
 # ----------------------------------------------------------------------------
@@ -411,3 +416,14 @@ def admonitions(locale: str) -> dict[str, str]:
     """
     primary = locale.replace("_", "-").split("-")[0]
     return dict(ADMONITIONS.get(locale, ADMONITIONS.get(primary, {})))
+
+
+def hreflang(locale: str) -> str:
+    """Return the language tag of a locale, e.g., `pt-BR` for `pt_BR`."""
+    return locale.replace("_", "-")
+
+
+def direction(locale: str) -> str:
+    """Return the text direction of a locale, i.e., `ltr` or `rtl`."""
+    primary = hreflang(locale).split("-")[0].lower()
+    return "rtl" if primary in RTL else "ltr"

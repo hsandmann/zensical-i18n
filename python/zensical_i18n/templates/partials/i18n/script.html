@@ -12,35 +12,53 @@
   (function () {
     var root = document.currentScript.parentElement
     var base = new URL(root.dataset.mdI18nBase, location.href)
-    var links = root.querySelectorAll("[data-md-i18n-root]")
+    var links = root.querySelectorAll("[data-md-i18n-locale]")
     var pages = null
 
-    /* Compute path of current page, relative to the language root */
+    /* Decode a path segment by segment, so encoded slashes and hashes are
+       compared correctly with the paths in the manifest */
+    function decode(path) {
+      return path.split("/").map(function (segment) {
+        try {
+          return decodeURIComponent(segment)
+        } catch (err) {
+          return segment
+        }
+      }).join("/")
+    }
+
+    /* Compute encoded path of current page, relative to the language root */
     function current() {
-      try {
-        var path = decodeURI(location.pathname)
-        var prefix = decodeURI(base.pathname)
-        return path.startsWith(prefix) ? path.slice(prefix.length) : ""
-      } catch (err) {
-        return ""
-      }
+      var path = location.pathname
+      return path.startsWith(base.pathname)
+        ? path.slice(base.pathname.length)
+        : ""
     }
 
     /* Link languages to the current page, or their home pages */
     function update() {
       if (!pages) return
       var path = current()
+      var page = decode(path)
+
       /* Index pages are listed as folders or index.html, depending on the
          use_directory_urls setting, while either form can be visited */
-      var alias = /(^|\/)$/.test(path)
-        ? path + "index.html"
-        : path.replace(/index\.html$/, "")
+      var alias = /(^|\/)$/.test(page)
+        ? page + "index.html"
+        : page.replace(/index\.html$/, "")
       links.forEach(function (link) {
+        var locale = link.dataset.mdI18nLocale
         var home = new URL(link.dataset.mdI18nRoot, base)
-        var known = pages[link.hreflang] || []
-        var exists = known.includes(path) || known.includes(alias)
+
+        /* Leave links to other sites and other protocols untouched */
+        if (home.origin !== base.origin || !/^https?:$/.test(home.protocol))
+          return
+
+        /* Link to the current page, if the language has it */
+        var known = Object.hasOwn(pages, locale) ? pages[locale] : []
+        var exists = known.includes(page) || known.includes(alias)
         link.href = exists
-          ? new URL(encodeURI(path), home).href + location.hash
+          ? new URL(path, home).href + location.hash
           : home.href
         link.toggleAttribute("data-md-i18n-missing", !exists)
       })
@@ -49,7 +67,10 @@
     /* Load manifest, and update links on interaction */
     fetch(root.dataset.mdI18nManifest)
       .then(function (res) { return res.ok ? res.json() : {} })
-      .then(function (data) { pages = data.pages || null; update() })
+      .then(function (data) {
+        pages = data.pages && typeof data.pages === "object" ? data.pages : null
+        update()
+      })
       .catch(function () {})
     root.addEventListener("pointerenter", update)
     root.addEventListener("focusin", update)
