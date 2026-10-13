@@ -27,7 +27,7 @@ build-backend = "uv_build"
 
 [project]
 name = "zensical-i18n"
-version = "0.2.0"
+version = "0.3.0"
 description = "Multi-language sites for Zensical, compatible with mkdocs-static-i18n"
 authors = [
     { name = "Humberto Sandmann", email = "hsandmann@ieee.org" }
