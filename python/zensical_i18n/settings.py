@@ -59,6 +59,10 @@ LOCALE = re.compile(r"^[A-Za-z]{2,8}(?:[_-][A-Za-z0-9]{1,8})*$")
 # Schemes allowed in links to languages - relative links have none.
 LINK_SCHEMES = ("", "http", "https")
 
+# Structures of sources: `suffix` (`page.pt.md`, the default, as in
+# mkdocs-static-i18n) or `folder` (`pt/page.md`).
+DOCS_STRUCTURES = ("suffix", "folder")
+
 # ----------------------------------------------------------------------------
 # Classes
 # ----------------------------------------------------------------------------
@@ -97,6 +101,7 @@ class Settings:
     config_file: Path
     project: dict[str, Any]
     languages: list[Language]
+    docs_structure: str = "suffix"
     fallback_to_default: bool = True
     reconfigure_theme: bool = True
     translate_admonitions: bool = True
@@ -217,9 +222,11 @@ def _parse_settings(
     config_file: Path, project: dict[str, Any], options: dict[str, Any]
 ) -> Settings:
     """Parse and validate plugin settings."""
-    structure = options.get("docs_structure", "folder")
-    if structure != "folder":
-        raise I18nError(f"Unsupported docs_structure '{structure}'.")
+    structure = options.get("docs_structure")
+    if structure is not None and structure not in DOCS_STRUCTURES:
+        raise I18nError(
+            f"Setting 'docs_structure' must be one of {DOCS_STRUCTURES}."
+        )
 
     # Parse languages and ensure locales are unique
     entries = options.get("languages")
@@ -249,6 +256,7 @@ def _parse_settings(
         config_file=config_file,
         project=project,
         languages=languages,
+        docs_structure=structure or "suffix",
         fallback_to_default=_bool(options, "fallback_to_default", True),
         reconfigure_theme=_bool(options, "reconfigure_theme", True),
         translate_admonitions=_bool(options, "translate_admonitions", True),
@@ -256,6 +264,18 @@ def _parse_settings(
 
     # Validate folders, as the site folder is cleaned when building
     _validate_dirs(settings)
+
+    # Versions before 0.3 defaulted to the folder structure, so we keep using
+    # it for projects that use it without setting it, and ask to set it
+    if structure is None:
+        folder = settings.docs_dir / settings.default.locale
+        if folder.is_dir():
+            settings.docs_structure = "folder"
+            click.echo(
+                f"Warning: {folder} looks like the folder structure, which is "
+                "used, but the default is 'suffix'. Set docs_structure = "
+                '"folder" in the i18n settings to silence this warning.'
+            )
     return settings
 
 

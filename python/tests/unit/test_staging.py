@@ -188,5 +188,71 @@ def test_locale_folder_case(project: Path) -> None:
 def test_page_sources(project: Path) -> None:
     settings = load_settings(project)
     sources = staging.page_sources(settings, settings.language("pt"))
-    assert sources["guide/install/"] == staging.Page("guide/install.md", False)
-    assert sources[""] == staging.Page("index.md", True)
+    assert sources["guide/install/"] == staging.Page(
+        "guide/install.md", False, "en/guide/install.md"
+    )
+    assert sources[""] == staging.Page("index.md", True, "pt/index.md")
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("index.pt.md", ("index.md", "pt")),
+        ("guide/page.en.md", ("guide/page.md", "en")),
+        ("assets/logo.pt.png", ("assets/logo.png", "pt")),
+        ("assets/app.min.js", ("assets/app.min.js", None)),
+        ("index.md", ("index.md", None)),
+        (".pt.md", (".pt.md", None)),
+        ("page.fr.md", ("page.fr.md", None)),
+    ],
+)
+def test_split_suffix(path: str, expected: tuple[str, str | None]) -> None:
+    rel, locale = staging.split_suffix(Path(path), {"en", "pt"})
+    assert (rel.as_posix(), locale) == expected
+
+
+def test_collect_suffix(suffix_project: Path) -> None:
+    settings = load_settings(suffix_project)
+    assert settings.docs_structure == "suffix"
+    docs = suffix_project.parent / "docs"
+
+    # The default language gets files without suffix
+    files = staging.collect(settings, settings.default)
+    assert {str(rel): source.path for rel, source in files.items()} == {
+        "index.md": docs / "index.md",
+        "guide/install.md": docs / "guide/install.md",
+        "assets/logo.png": docs / "assets/logo.png",
+        "assets/app.min.js": docs / "assets/app.min.js",
+    }
+    assert all(source.fallback is None for source in files.values())
+
+    # Other languages get their own files, and fall back to the default
+    files = staging.collect(settings, settings.language("pt"))
+    assert files[Path("index.md")] == staging.Source(docs / "index.pt.md")
+    assert files[Path("extra.md")] == staging.Source(docs / "extra.pt.md")
+    assert files[Path("assets/logo.png")].path == docs / "assets/logo.pt.png"
+    assert files[Path("guide/install.md")] == staging.Source(
+        docs / "guide/install.md", "en"
+    )
+
+    # Without fallback, pages are left out, but other files are shared
+    settings.fallback_to_default = False
+    files = staging.collect(settings, settings.language("pt"))
+    assert Path("guide/install.md") not in files
+    assert Path("assets/app.min.js") in files
+
+
+def test_collect_suffix_default_language_suffix(suffix_project: Path) -> None:
+    docs = suffix_project.parent / "docs"
+    docs.joinpath("guide/install.en.md").write_text("# Install (en)\n")
+    settings = load_settings(suffix_project)
+
+    # Files suffixed with the default locale take precedence
+    files = staging.collect(settings, settings.default)
+    assert files[Path("guide/install.md")].path == (
+        docs / "guide/install.en.md"
+    )
+    files = staging.collect(settings, settings.language("pt"))
+    assert files[Path("guide/install.md")] == staging.Source(
+        docs / "guide/install.en.md", "en"
+    )
