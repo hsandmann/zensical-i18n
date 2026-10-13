@@ -4,30 +4,31 @@
 
   Wraps the actions partial of the theme in use, pointing edit and view
   links to the source each page was built from, e.g., `page.pt.md` or
-  `pt/page.md`, as Zensical links to the staged file, e.g., `page.md`.
+  `pt/page.md`, as Zensical links to the staged file, e.g., `page.md`. The
+  mapping is generated, and updated while serving when pages change.
 -#}
-{% set edits = config.extra.i18n_edits %}
-{% set target = none %}
-{% if page and page.edit_url and edits and page.url in edits %}
-  {% set edit = edits[page.url] %}
-  {% if page.edit_url is endingwith(edit[0]) %}
-    {% set target = page.edit_url[:(page.edit_url | length) - (edit[0] | length)] ~ edit[1] %}
-  {% elif page.edit_url is endingwith(edit[2]) %}
-    {% set target = page.edit_url[:(page.edit_url | length) - (edit[2] | length)] ~ edit[3] %}
-  {% endif %}
-{% endif %}
-{% if target %}
+{%- import "partials/i18n/edits.html" as data -%}
+{%- set target = none -%}
+{%- if page and page.edit_url and page.url in data.edits -%}
+  {%- set edit = data.edits[page.url] -%}
+  {%- if page.edit_url is endingwith(edit[0]) -%}
+    {%- set target = page.edit_url[:(page.edit_url | length) - (edit[0] | length)] ~ edit[1] -%}
+  {%- elif page.edit_url is endingwith(edit[2]) -%}
+    {%- set target = page.edit_url[:(page.edit_url | length) - (edit[2] | length)] ~ edit[3] -%}
+  {%- endif -%}
+{%- endif -%}
+{%- if target -%}
   {#- The view link is derived from the edit link like the theme does -#}
-  {% if "/blob/" in page.edit_url %}
-    {% set part = "/blob/" %}
-  {% else %}
-    {% set part = "/edit/" %}
-  {% endif %}
-  {% filter replace(page.edit_url | replace(part, "/raw/"), target | replace(part, "/raw/")) %}
-    {% filter replace(page.edit_url, target) %}
-      {% include "partials/i18n/original-actions.html" %}
-    {% endfilter %}
-  {% endfilter %}
-{% else %}
-  {% include "partials/i18n/original-actions.html" %}
-{% endif %}
+  {%- if "/blob/" in page.edit_url -%}
+    {%- set part = "/blob/" -%}
+  {%- else -%}
+    {%- set part = "/edit/" -%}
+  {%- endif -%}
+  {%- filter replace(page.edit_url | replace(part, "/raw/"), target | replace(part, "/raw/")) -%}
+    {%- filter replace(page.edit_url, target) -%}
+      {%- include "partials/i18n/original-actions.html" -%}
+    {%- endfilter -%}
+  {%- endfilter -%}
+{%- else -%}
+  {%- include "partials/i18n/original-actions.html" -%}
+{%- endif -%}

@@ -285,3 +285,16 @@ def test_check_unconfigured_suffixes(suffix_project: Path) -> None:
     warnings = staging.check(settings)
     assert len(warnings) == 1
     assert "index.de.md" in warnings[0]
+
+
+def test_check_ignores_non_locale_suffixes(suffix_project: Path) -> None:
+    docs = suffix_project.parent / "docs"
+    for name in ("setup.win.md", "docker.dev.md", "notes.v2.md"):
+        docs.joinpath(name).write_text("# Page\n")
+    assert staging.check(load_settings(suffix_project)) == []
+
+
+def test_url_keys() -> None:
+    assert staging.url_keys("q?x/") == ["q?x/", "q%3Fx/"]
+    assert staging.url_keys("100%/") == ["100%/", "100%25/"]
+    assert staging.url_keys("a b/") == ["a b/", "a%20b/"]

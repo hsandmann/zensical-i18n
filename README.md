@@ -144,8 +144,12 @@ be a Spanish file, if `es` is configured. Having both `guide.md` and
 
 Link to files without suffix, e.g., `guide.md` or `assets/logo.png`, which
 resolves to the file of each language. Links with suffix, e.g.,
-`guide.pt.md`, work as well, but Zensical reports them as invalid, as it
-validates links before they're resolved.
+`guide.pt.md`, work as well in Markdown, but Zensical reports them as
+invalid, as it validates links before they're resolved, which fails builds
+with `--strict`. Suffixed links in raw HTML, e.g., `<img src="logo.pt.png">`,
+aren't resolved. Pages with a suffix that looks like a locale, which isn't
+configured, e.g., `index.de.md`, are reported, as they're built as pages of
+their own.
 
 ### Folder
 
@@ -341,6 +345,10 @@ modules.
   `partials/alternate.html` and wrap `partials/content.html`. A custom
   `alternate.html` in `custom_dir` is ignored while `reconfigure_theme` is
   enabled.
+- Edit links are fixed by wrapping the theme's `partials/actions.html`,
+  independent of `reconfigure_theme`. A custom `partials/content.html` that
+  renders the edit buttons itself, instead of including `actions.html`,
+  links to the staged files.
 
 ## Contributing
 

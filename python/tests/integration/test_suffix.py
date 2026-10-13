@@ -24,6 +24,13 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
+import socket
+import subprocess
+import sys
+import time
+import urllib.request
 from typing import TYPE_CHECKING
 from xml.etree import ElementTree
 
@@ -202,3 +209,66 @@ def test_warnings_are_printed_once(
     builder.build(load_settings(project))
     output = capsys.readouterr().out
     assert output.count("looks like the folder structure") == 1
+
+
+def test_edit_links_with_special_characters(suffix_project: Path) -> None:
+    docs = suffix_project.parent / "docs"
+    for name in ("q?x", "pct%20x", "a b"):
+        docs.joinpath(f"{name}.pt.md").write_text(f"# {name}\n")
+    builder.build(load_settings(suffix_project))
+    site = suffix_project.parent / "site"
+    assert _edit(site / "pt/q?x/index.html") == f"{EDIT}/q?x.pt.md"
+    assert _edit(site / "pt/pct%20x/index.html") == f"{EDIT}/pct%20x.pt.md"
+    assert _edit(site / "pt/a b/index.html") == f"{EDIT}/a b.pt.md"
+
+
+def test_serve_updates_edit_links(suffix_project: Path) -> None:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    command = [
+        sys.executable,
+        "-m",
+        "zensical_i18n",
+        "serve",
+        "-f",
+        str(suffix_project),
+        "-l",
+        "pt",
+        "-a",
+        f"127.0.0.1:{port}",
+    ]
+    process = subprocess.Popen(  # noqa: S603
+        command,
+        cwd=suffix_project.parent,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+    def fetch(path: str) -> str:
+        url = f"http://127.0.0.1:{port}/docs/pt/{path}"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            return response.read().decode()
+
+    def wait(path: str, text: str) -> bool:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            try:
+                if text in fetch(path):
+                    return True
+            except OSError:
+                pass
+            time.sleep(0.5)
+        return False
+
+    try:
+        assert wait("", f"{EDIT}/index.pt.md")
+
+        # Translations added while serving are linked to their sources
+        docs = suffix_project.parent / "docs"
+        docs.joinpath("fresh.pt.md").write_text("# Fresh\n")
+        assert wait("fresh/", f"{EDIT}/fresh.pt.md")
+    finally:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=30)
