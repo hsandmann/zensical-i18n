@@ -16,8 +16,13 @@
     {% set chevron = "material/chevron-down" %}
   {% endif %}
   {% set icon = config.theme.icon.alternate or "material/translate" %}
-  {#- The base URL is absolute on some pages, e.g., 404 pages -#}
+  {#- The base URL is absolute on some pages, e.g., 404 pages, where it's
+      the site root without site URL, so we add the language's prefix -#}
   {% set root = (base_url ~ "/") | replace("//", "/") %}
+  {% set absolute = not config.site_url and base_url[:1] == "/" %}
+  {% if absolute %}
+    {% set root = root ~ i18n.prefix %}
+  {% endif %}
   <div class="md-header__option md-i18n" data-md-i18n data-md-i18n-base="{{ root }}" data-md-i18n-manifest="{{ root }}{{ i18n.manifest }}">
     <div class="md-select">
       <button class="md-header__button md-i18n__button" aria-label="{{ lang.t('select.language') }} ({{ i18n.lang }})">
@@ -41,7 +46,12 @@
               {% set href = alt.link ~ page.url %}
             {% endif %}
             <li class="md-select__item">
-              <a href="{{ href | url | e }}" hreflang="{{ alt.lang }}" lang="{{ alt.lang }}" class="md-select__link md-i18n__link" target="_self" data-md-i18n-locale="{{ alt.locale }}" data-md-i18n-root="{{ alt.link | e }}" {% if current %}aria-current="true"{% endif %}>
+              {% if absolute and "://" not in href %}
+                {% set href = root ~ href %}
+              {% else %}
+                {% set href = href | url %}
+              {% endif %}
+              <a href="{{ href | e }}" hreflang="{{ alt.lang }}" lang="{{ alt.lang }}" class="md-select__link md-i18n__link" target="_self" data-md-i18n-locale="{{ alt.locale }}" data-md-i18n-root="{{ alt.link | e }}" {% if current %}aria-current="true"{% endif %}>
                 <span class="md-i18n__name">{{ alt.name | e }}</span>
                 <span class="md-i18n__locale">{{ alt.lang }}</span>
                 <span class="md-i18n__check md-icon">

@@ -58,6 +58,9 @@ CANONICAL = re.compile(
     r"(\"[^\"]*\"|'[^']*'|[^\s>]+)"
 )
 
+# Root element of a page, with the language of the theme.
+HTML_LANG = re.compile(r"(<html\b[^>]*\blang=)(\"[^\"]*\"|'[^']*'|[^\s>]+)")
+
 # Element containing the content of a page.
 ARTICLE = re.compile(r"<article\b[^>]*\bmd-content__inner\b[^>]*>")
 
@@ -190,8 +193,11 @@ def _process_pages(site: Site, language: Language) -> None:
         except UnicodeDecodeError:
             continue
 
-        # Remove links to the home pages of all languages
+        # Remove links to the home pages of all languages, and set the full
+        # language tag, as the theme might fall back to the primary language
         result = ALTERNATE.sub("", text)
+        tag = languages.hreflang(language.locale)
+        result = HTML_LANG.sub(rf'\g<1>"{tag}"', result, count=1)
         if page is not None and not page.translated:
             result = _process_fallback(site, language, page, result)
         if result != text:

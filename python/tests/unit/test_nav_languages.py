@@ -80,3 +80,11 @@ def test_hreflang_and_direction() -> None:
     assert languages.direction("ar") == "rtl"
     assert languages.direction("he-IL") == "rtl"
     assert languages.direction("en") == "ltr"
+
+
+def test_lookup_normalizes_locales() -> None:
+    assert languages.notice("zh_TW", "English").startswith("此頁面")
+    assert languages.notice("pt_PT", "English").startswith("Esta página")
+    assert "Está a ler" in languages.notice("pt_PT", "English")
+    assert languages.admonitions("zh_TW")["note"] == "註"
+    assert languages.tags("zh_Hant_TW") == ["zh-Hant-TW", "zh-Hant", "zh"]

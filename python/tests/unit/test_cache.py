@@ -25,6 +25,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from zensical_i18n.builder import CACHE_ACTIVE, _command, _replace, cache
 from zensical_i18n.settings import load_settings
 
@@ -112,3 +114,24 @@ def test_command_isolates_project_modules(project: Path) -> None:
     settings = load_settings(project)
     command = _command("build", settings, settings.default, {})
     assert command[1:3] == ["-P", "-m"]
+
+
+@pytest.mark.parametrize("swapped", [False, True])
+def test_cache_recovers_from_interruption_before_swap(
+    project: Path, swapped: bool
+) -> None:
+    settings = load_settings(project)
+    caches = settings.work_dir / "cache"
+    caches.mkdir(parents=True)
+
+    # Interrupted after stashing the project's cache, with or without the
+    # language recorded, but before the language's cache was swapped in
+    caches.joinpath(".project").mkdir()
+    caches.joinpath(".project/owner").write_text("project")
+    if swapped:
+        caches.joinpath(CACHE_ACTIVE).write_text("pt")
+
+    with cache(settings, settings.language("en")):
+        pass
+    current = settings.root / ".cache"
+    assert current.joinpath("owner").read_text() == "project"

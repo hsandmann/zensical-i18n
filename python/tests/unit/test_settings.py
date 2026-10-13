@@ -251,3 +251,16 @@ def test_work_path_symlink(tmp_path: Path) -> None:
     settings.work_dir.joinpath("docs").symlink_to(outside)
     with pytest.raises(I18nError, match="symbolic link"):
         settings.work_path("docs", "en")
+
+
+@pytest.mark.parametrize("site_dir", [".git", ".hidden/site"])
+def test_hidden_site_dir(tmp_path: Path, site_dir: str) -> None:
+    config = _project(tmp_path, f'site_dir = "{site_dir}"\n')
+    with pytest.raises(I18nError, match="hidden"):
+        load_settings(config)
+
+
+def test_locale_with_trailing_newline(tmp_path: Path) -> None:
+    config = _project(tmp_path, "", f'{LANGUAGE}locale = "pt\\n"\n')
+    with pytest.raises(I18nError, match="locale"):
+        load_settings(config)
